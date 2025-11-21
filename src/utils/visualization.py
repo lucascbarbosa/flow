@@ -81,8 +81,8 @@ def plot_trajectories(
             label=end_label
         )
 
-    ax.set_xlabel('x1')
-    ax.set_ylabel('x2')
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
     ax.set_title('ODE Trajectories')
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
@@ -172,8 +172,8 @@ def plot_vector_field(
         cmap='viridis', scale=20, width=0.005, alpha=0.7
     )
 
-    ax.set_xlabel('x1')
-    ax.set_ylabel('x2')
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
     ax.set_title(f'Vector Field at t={t_value:.2f}')
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
@@ -242,8 +242,8 @@ def plot_transformation(
     )
     ax.add_patch(circle)
 
-    ax.set_xlabel('x1')
-    ax.set_ylabel('x2')
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
     ax.set_title('Transformation z -> x')
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
@@ -278,8 +278,8 @@ def plot_data_distribution(
         data = data.cpu().numpy()
 
     ax.scatter(data[:, 0], data[:, 1], alpha=0.5, s=10)
-    ax.set_xlabel('x1')
-    ax.set_ylabel('x2')
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
     ax.axis('equal')

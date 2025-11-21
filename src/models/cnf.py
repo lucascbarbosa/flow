@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from src.models.vector_field import VectorField
 from src.utils.trace import divergence_exact
-from torchdiffeq import odeint_adjoint
+from torchdiffeq import odeint
 from torch.distributions import Distribution
 from typing import Literal, Optional, Tuple
 
@@ -61,17 +61,22 @@ class CNF(nn.Module):
             torch.Tensor: Derivative with shape (batch, features + 1).
         """
         x = state[:, :-1]  # (batch, features)
+        if not x.requires_grad:
+            # 1. Create a detached leaf that tracks gradients
+            x_detached = x.detach()
+            x_detached.requires_grad_(True)
 
-        # Enable gradients for x
-        x = x.requires_grad_(True)
+            # 2. Compute trace within enable_grad context
+            with torch.enable_grad():
+                trace = divergence_exact(lambda x_: self.vf(t, x_), x_detached)
 
-        # Compute vector field
-        dx_dt = self.vf(t, x)  # (batch, features)
+            # 3. Compute vector field normally
+            dx_dt = self.vf(t, x)
 
-        # Compute trace of Jacobian
-        trace = divergence_exact(lambda x: self.vf(t, x), x)  # (batch,)
+        else:
+            dx_dt = self.vf(t, x)
+            trace = divergence_exact(lambda x_: self.vf(t, x_), x)
 
-        # d(log_det)/dt = -trace (note the sign!)
         dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
 
         return torch.cat([dx_dt, dlogdet_dt], dim=-1)
@@ -102,37 +107,25 @@ class CNF(nn.Module):
             # x -> z: integrate from t=0 to t=1
             t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
 
+        if not x.requires_grad and torch.is_grad_enabled():
+            x = x.clone().requires_grad_(True)
+
         # Initial state: [x, log_det=0]
-        # When using adjoint_params, we need state_init to require grad
-        # to build the computation graph for gradient computation
-        # w.r.t. parameters
-        if x.requires_grad:
-            log_det_init = x[:, :1] * 0.0
-        else:
-            log_det_init = torch.zeros(
-                x.shape[0], 1,
-                device=x.device,
-                dtype=x.dtype,
-                requires_grad=True
-            )
-            # Ensure x requires grad for adjoint method to work
-            x = x.requires_grad_(True)
+        log_det_init = torch.zeros(
+            x.shape[0], 1,
+            device=x.device,
+            dtype=x.dtype,
+        )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
-        # Ensure state_init requires grad when using adjoint_params
-        # This is necessary for odeint_adjoint to build the computation graph
-        if not state_init.requires_grad:
-            state_init = state_init.requires_grad_(True)
-
-        # Integrate augmented ODE
-        state_t = odeint_adjoint(
+        # Regular odeint handles both input and parameter gradients
+        state_t = odeint(
             self._augmented_dynamics,
             state_init,
             t_span,
             method=self.method,
             rtol=self.rtol,
-            atol=self.atol,
-            adjoint_params=tuple(self.vf.parameters())
+            atol=self.atol
         )
 
         # Final state

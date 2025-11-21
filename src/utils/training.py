@@ -142,7 +142,6 @@ def train_cnf(
 
     for epoch in range(num_epochs):
         total_loss = 0.0
-        total_nll = 0.0
         n_batches = 0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
@@ -164,12 +163,10 @@ def train_cnf(
             optimizer.step()
 
             total_loss += loss.item()
-            total_nll += -log_prob.mean().item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-        avg_nll = total_nll / n_batches
-        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}")
+        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
 
 
 class CountingVectorField(nn.Module):

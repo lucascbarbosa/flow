@@ -23,9 +23,6 @@ def divergence_exact(
     """
     batch_size, dim = x.shape
 
-    # Enable gradients
-    x = x.requires_grad_(True)
-
     # Compute f(x)
     f_x = f(x)  # (batch, dim)
 
