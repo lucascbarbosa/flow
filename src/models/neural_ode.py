@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torchdiffeq import odeint
 from src.models.vector_field import VectorField
+from typing import Literal
 
 
 class NeuralODE(nn.Module):
@@ -10,7 +11,7 @@ class NeuralODE(nn.Module):
     def __init__(
         self,
         vector_field: VectorField,
-        solver: str = 'dopri5',
+        solver: Literal['euler', 'rk4', 'dopri5'] = 'dopri5',
         rtol: float = 1e-3,
         atol: float = 1e-4
     ) -> None:
@@ -33,13 +34,13 @@ class NeuralODE(nn.Module):
 
     def forward(
         self,
-        x0: torch.Tensor,
+        z: torch.Tensor,
         t_span: torch.Tensor | None = None
     ) -> torch.Tensor:
         """Integrate ODE from t=0 to t=1.
 
         Args:
-            x0 (torch.Tensor): Initial state with shape (batch, features).
+            z (torch.Tensor): Initial state with shape (batch, features).
             t_span (torch.Tensor, optional): Time points to evaluate.
                 Default is [0, 1].
 
@@ -48,13 +49,13 @@ class NeuralODE(nn.Module):
                 (len(t_span), batch, features).
         """
         if t_span is None:
-            t_span = torch.tensor([0., 1.], device=x0.device, dtype=x0.dtype)
+            t_span = torch.linspace(0, 1, 100).to(z.device)
 
         # Use odeint from torchdiffeq
         # The vector field must accept (t, x) where t is scalar
         x_t = odeint(
             self.vf,
-            x0,
+            z,
             t_span,
             method=self.solver,
             rtol=self.rtol,

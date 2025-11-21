@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 
 def plot_trajectories(
     model: NeuralODE,
-    x0: torch.Tensor,
+    z: torch.Tensor,
     t_span: Optional[torch.Tensor] = None,
     n_points: int = 100,
     ax: Optional[Axes] = None
@@ -21,7 +21,7 @@ def plot_trajectories(
     Args:
         model (NeuralODE): NeuralODE model.
 
-        x0 (torch.Tensor): Initial conditions with shape (batch, 2).
+        z (torch.Tensor): Initial conditions with shape (batch, 2).
 
         t_span (torch.Tensor): Time points for integration.
 
@@ -41,19 +41,24 @@ def plot_trajectories(
     # Integrate ODE
     model.eval()
     with torch.no_grad():
-        x_t = model(x0, t_span)
+        x_t = model(z, t_span)
 
-    # Plot trajectories
+    # Plot trajectories with legends for start, end, trajectories
     x_t_np = x_t.cpu().numpy()
 
-    for i in range(x0.shape[0]):
+    for i in range(z.shape[0]):
+        # Only set label for the first trajectory for legend clarity
+        traj_label = "Trajectory" if i == 0 else None
+        start_label = "Start Point" if i == 0 else None
+        end_label = "End Point" if i == 0 else None
+
         ax.plot(
             x_t_np[:, i, 0],
             x_t_np[:, i, 1],
             alpha=0.6,
             linewidth=1.5,
             color='blue',
-            label=f'Trajectory {i}'
+            label=traj_label,
         )
         # Mark start
         ax.scatter(
@@ -62,7 +67,8 @@ def plot_trajectories(
             color='green',
             marker='o',
             s=50,
-            zorder=5
+            zorder=5,
+            label=start_label
         )
         # Mark end
         ax.scatter(
@@ -72,7 +78,7 @@ def plot_trajectories(
             marker='s',
             s=50,
             zorder=5,
-            label=f'End point {i}'
+            label=end_label
         )
 
     ax.set_xlabel('x1')
@@ -80,6 +86,7 @@ def plot_trajectories(
     ax.set_title('ODE Trajectories')
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
+    ax.legend()
     return ax
 
 
@@ -112,10 +119,23 @@ def plot_vector_field(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-    t = torch.tensor(
-        t,
-        dtype=torch.float32,
-    )
+    # Convert t to tensor and extract scalar value for title
+    if isinstance(t, torch.Tensor):
+        if t.dim() == 0:
+            t_value = t.item()
+            t_tensor = t.to(torch.float32)
+        elif t.dim() == 1:
+            t_value = t[-1].item() if len(t) > 0 else t[0].item()
+            t_tensor = (
+                t[-1].to(torch.float32) if len(t) > 0
+                else t[0].to(torch.float32)
+            )
+        else:
+            t_value = t[0, -1].item()
+            t_tensor = t[0, -1].to(torch.float32)
+    else:
+        t_value = float(t)
+        t_tensor = torch.tensor(t_value, dtype=torch.float32)
 
     # Create grid
     x = np.linspace(xlim[0], xlim[1], n_grid)
@@ -135,7 +155,7 @@ def plot_vector_field(
         else:
             vf = model
 
-        dx_dt = vf(t, grid_points).cpu().numpy()
+        dx_dt = vf(t_tensor, grid_points).cpu().numpy()
 
     # Reshape
     U = dx_dt[:, 0].reshape(X.shape)
@@ -154,7 +174,7 @@ def plot_vector_field(
 
     ax.set_xlabel('x1')
     ax.set_ylabel('x2')
-    ax.set_title(f'Vector Field at t={t[0, -1]}')
+    ax.set_title(f'Vector Field at t={t_value:.2f}')
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     ax.grid(True, alpha=0.3)

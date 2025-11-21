@@ -20,11 +20,13 @@ class Synthetic2D(Dataset):
         """Initialize synthetic 2D dataset.
 
         Args:
-            n_samples (int): Number of samples.
+            n_samples (int): Number of samples. Default is 5000.
 
-            noise (float): Noise level.
+            noise (float): Noise level. Default is 0.05.
 
-            dataset_type (Literal['moons', 'circles', 'spirals']): Dataset type.
+            dataset_type (Literal['moons', 'circles', 'spirals']): Dataset
+                type. Default is 'moons'.
+
         """
         if dataset_type == 'moons':
             X, _ = make_moons(

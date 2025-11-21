@@ -8,6 +8,63 @@ from tqdm import tqdm
 from typing import Optional
 
 
+def rbf_kernel(
+    x: torch.Tensor, y: torch.Tensor, gamma: float = 1.0
+) -> torch.Tensor:
+    """Compute RBF (Gaussian) kernel matrix k(x, y) = exp(-γ ||x - y||²).
+
+    Args:
+        x (torch.Tensor): First set of samples with shape (n, d).
+        y (torch.Tensor): Second set of samples with shape (m, d).
+        gamma (float): Kernel bandwidth parameter.
+
+    Returns:
+        torch.Tensor: Kernel matrix with shape (n, m).
+    """
+    # Compute pairwise squared distances
+    # ||x_i - y_j||² = ||x_i||² + ||y_j||² - 2 * x_i^T y_j
+    x_norm = (x ** 2).sum(dim=1, keepdim=True)  # (n, 1)
+    y_norm = (y ** 2).sum(dim=1, keepdim=True).T  # (1, m)
+    xy = torch.mm(x, y.T)  # (n, m)
+
+    squared_dist = x_norm + y_norm - 2 * xy
+    return torch.exp(-gamma * squared_dist)
+
+
+def mmd2_loss(
+    x: torch.Tensor, y: torch.Tensor, gamma: float = 1.0
+) -> torch.Tensor:
+    """Compute MMD² (Maximum Mean Discrepancy squared).
+
+    MMD²(X,Y) = (1/n²) Σᵢⱼ k(xᵢ, xⱼ) + (1/m²) Σᵢⱼ k(yᵢ, yⱼ)
+                - (2/nm) Σᵢⱼ k(xᵢ, yⱼ)
+
+    Args:
+        x (torch.Tensor): First set of samples with shape (n, d).
+        y (torch.Tensor): Second set of samples with shape (m, d).
+        gamma (float): RBF kernel bandwidth parameter.
+
+    Returns:
+        torch.Tensor: MMD² value (scalar).
+    """
+    n = x.shape[0]
+    m = y.shape[0]
+
+    # Compute kernel matrices
+    k_xx = rbf_kernel(x, x, gamma)  # (n, n)
+    k_yy = rbf_kernel(y, y, gamma)  # (m, m)
+    k_xy = rbf_kernel(x, y, gamma)  # (n, m)
+
+    # MMD² = (1/n²) Σᵢⱼ k(xᵢ, xⱼ) + (1/m²) Σᵢⱼ k(yᵢ, yⱼ)
+    #        - (2/nm) Σᵢⱼ k(xᵢ, yⱼ)
+    term1 = k_xx.sum() / (n * n)
+    term2 = k_yy.sum() / (m * m)
+    term3 = k_xy.sum() * 2 / (n * m)
+
+    mmd2 = term1 + term2 - term3
+    return mmd2
+
+
 def train_neural_ode(
     model: NeuralODE,
     dataloader: DataLoader,
@@ -44,14 +101,14 @@ def train_neural_ode(
             optimizer.zero_grad()
 
             # Sample initial conditions from Gaussian distribution N(0, I)
-            x0 = torch.randn(batch_size, n_features, device=device)
+            z = torch.randn(batch_size, n_features, device=device)
 
             # Forward: integrate from t=0 to t=1
-            x_t = model(x0)
-            z = x_t[-1]  # Final state after transformation
+            x_t = model(z)
+            x = x_t[-1]  # Final state after transformation
 
-            # Loss: MSE between transformed samples and target data
-            loss = nn.functional.mse_loss(z, x_target)
+            # Loss: MMD² between transformed samples and target data
+            loss = mmd2_loss(x, x_target)
 
             loss.backward()
             optimizer.step()
@@ -61,6 +118,8 @@ def train_neural_ode(
 
         avg_loss = total_loss / n_batches
         print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
+
+    return avg_loss
 
 
 def train_cnf(
@@ -113,6 +172,18 @@ def train_cnf(
         print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}")
 
 
+class CountingVectorField(nn.Module):
+    """Wrapper module that counts function evaluations."""
+    def __init__(self, vf: nn.Module):
+        super().__init__()
+        self.vf = vf
+        self.nfe = 0
+
+    def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        self.nfe += 1
+        return self.vf(t, x)
+
+
 def count_nfe(
     model: NeuralODE | CNF,
     x: torch.Tensor,
@@ -128,21 +199,21 @@ def count_nfe(
     Returns:
         int: Number of function evaluations.
     """
-    nfe = [0]
+    # Create counting wrapper module
+    counting_vf = CountingVectorField(model.vf)
 
-    def count_wrapper(t: torch.Tensor, x_state: torch.Tensor) -> torch.Tensor:
-        nfe[0] += 1
-        return model.vf(t, x_state)
-
-    # Create temporary wrapper
+    # Temporarily replace the vector field
     original_vf = model.vf
-    model.vf = count_wrapper
+    model.vf = counting_vf
 
     # Forward pass
     with torch.no_grad():
         _ = model(x, t_span)
 
-    # Restore
+    # Get count
+    nfe_count = counting_vf.nfe
+
+    # Restore original vector field
     model.vf = original_vf
 
-    return nfe[0]
+    return nfe_count

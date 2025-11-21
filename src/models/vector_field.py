@@ -33,7 +33,7 @@ class VectorField(nn.Module):
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
             if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.Tanh())
+                layers.append(nn.SiLU())
         self.net = nn.Sequential(*layers)
 
         # Initialization: last layer with small weights (σ=0.01)
