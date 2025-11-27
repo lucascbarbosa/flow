@@ -466,9 +466,6 @@ def plot_transformation_realnvp(
     else:
         ax_left, ax_right = axes
 
-    # Get device
-    device = next(flow.parameters()).device
-
     # Get the distribution from the flow (unconditional)
     flow.eval()
     with torch.no_grad():
