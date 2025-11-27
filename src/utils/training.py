@@ -124,6 +124,53 @@ def train_cnf(
         print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
 
 
+def train_realnvp(
+    flow,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    num_epochs: int = 100
+) -> None:
+    """Train RealNVP flow using negative log-likelihood.
+
+    Args:
+        flow: Zuko RealNVP flow model.
+        dataloader (DataLoader): DataLoader for training data.
+        optimizer (Optimizer): Optimizer for training.
+        device (Device): Device to run training on.
+        num_epochs (int): Number of training epochs.
+    """
+    flow.train()
+
+    for epoch in range(num_epochs):
+        total_loss = 0.0
+        n_batches = 0
+
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+            x = batch[0].to(device)
+            c = batch[1].to(device)
+            optimizer.zero_grad()
+
+            # Calculate log-likelihood
+            log_prob = flow(c).log_prob(x)
+
+            # Loss: negative log-likelihood
+            loss = -log_prob.mean()
+
+            loss.backward()
+
+            # Gradient clipping (optional, but recommended)
+            torch.nn.utils.clip_grad_norm_(flow.parameters(), max_norm=1.0)
+
+            optimizer.step()
+
+            total_loss += loss.item()
+            n_batches += 1
+
+        avg_loss = total_loss / n_batches
+        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
+
+
 class CountingVectorField(nn.Module):
     """Wrapper module that counts function evaluations."""
     def __init__(self, vf: nn.Module):

@@ -429,3 +429,115 @@ def plot_data_distribution(
     ax.axis('equal')
 
     return ax
+
+
+def plot_transformation_realnvp(
+    flow,
+    n_samples: int = 1000,
+    xlim: Tuple[float, float] = (-3, 3),
+    ylim: Tuple[float, float] = (-3, 3),
+    axes: Optional[Tuple[Axes, Axes]] = None
+) -> Tuple[Axes, Axes]:
+    """Plot RealNVP transformation from base distribution to data distribution.
+
+    Creates two plots:
+    - Left: Initial z samples from N(0, I)
+    - Right: Final transformed state x
+
+    Args:
+        flow: Zuko flow model (returns a Distribution when called).
+
+        n_samples (int): Number of samples to plot. Default is 1000.
+
+        xlim (Tuple[float, float]): Limits in x direction.
+
+        ylim (Tuple[float, float]): Limits in y direction.
+
+        axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
+            left and right plots. If None, creates new figure.
+
+    Returns:
+        Tuple[Axes, Axes]: Left and right matplotlib axes.
+    """
+    if axes is None:
+        fig, (ax_left, ax_right) = plt.subplots(
+            1, 2, figsize=(16, 8)
+        )
+    else:
+        ax_left, ax_right = axes
+
+    # Get device
+    device = next(flow.parameters()).device
+
+    # Get the distribution from the flow (unconditional)
+    flow.eval()
+    with torch.no_grad():
+        dist = flow(None)
+
+        # Sample z ~ N(0, I) from base distribution
+        # In zuko, the base distribution is accessible via dist.base
+        try:
+            z = dist.base.sample((n_samples,))
+        except AttributeError:
+            # Fallback: sample manually from standard normal
+            # Get dimension from transform
+            from torch.distributions import MultivariateNormal
+            dim = dist.transform.domain.event_shape[0]
+            base = MultivariateNormal(
+                torch.zeros(dim, device=next(flow.parameters()).device),
+                torch.eye(dim, device=next(flow.parameters()).device)
+            )
+            z = base.sample((n_samples,))
+
+        # Transform z -> x using the inverse transform
+        # The flow's transform maps x -> z, so we use .inv() to map z -> x
+        transform = dist.transform
+        x = transform.inv(z)
+
+    z_np = z.cpu().numpy()
+    x_np = x.cpu().numpy()
+
+    # LEFT PLOT: Initial z samples (gray, no labels)
+    ax_left.scatter(
+        z_np[:, 0],
+        z_np[:, 1],
+        color='gray',
+        marker='o',
+        s=50,
+        alpha=0.6,
+        linewidths=1
+    )
+
+    # Unit circle (reference)
+    circle = Circle(
+        (0, 0), 2, fill=False, linestyle='--',
+        color='gray', alpha=0.5, label='|z|=2'
+    )
+    ax_left.add_patch(circle)
+
+    ax_left.set_xlabel(r'$x_1$')
+    ax_left.set_ylabel(r'$x_2$')
+    ax_left.set_title('Sample points from normal z ~ N(0,I)')
+    ax_left.set_xlim(xlim)
+    ax_left.set_ylim(ylim)
+    ax_left.grid(True, alpha=0.3)
+    ax_left.axis('equal')
+
+    # RIGHT PLOT: Final transformed state
+    ax_right.scatter(
+        x_np[:, 0],
+        x_np[:, 1],
+        color='gray',
+        alpha=0.5,
+        s=10
+    )
+
+    ax_right.set_xlabel(r'$x_1$')
+    ax_right.set_ylabel(r'$x_2$')
+    ax_right.set_title('Transformed samples x = T⁻¹(z)')
+    ax_right.set_xlim(xlim)
+    ax_right.set_ylim(ylim)
+    ax_right.grid(True, alpha=0.3)
+    ax_right.axis('equal')
+
+    return ax_left, ax_right
