@@ -1,8 +1,8 @@
 """Experimento 2: Regularização e tolerâncias."""
 import torch
 import torch.optim as optim
-from ..models.vector_field import VectorField
 from ..models.neural_ode import NeuralODE
+from ..models.vector_field import VectorField
 from ..utils.datasets import Synthetic2D, get_dataloader
 from ..utils.training import train_neural_ode, count_nfe
 

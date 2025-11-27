@@ -23,6 +23,13 @@ class CNF(nn.Module):
         Args:
             vector_field (VectorField): Vector field module f(x, t).
 
+            method (Literal['dopri5', 'euler', 'rk4']): ODE solver method.
+                Default is 'dopri5'.
+
+            rtol (float): Relative tolerance for ODE solver. Default is 1e-3.
+
+            atol (float): Absolute tolerance for ODE solver. Default is 1e-4.
+
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).
         """
@@ -33,13 +40,30 @@ class CNF(nn.Module):
         self.atol = atol
         if base_dist is None:
             # Prior: N(0, I)
+            # Store parameters separately so they can be moved to device
             features = vector_field.features
-            self.base_dist = torch.distributions.MultivariateNormal(
-                torch.zeros(features),
-                torch.eye(features)
-            )
+            self.register_buffer('_base_loc', torch.zeros(features))
+            self.register_buffer('_base_cov', torch.eye(features))
+            self.base_dist = None
         else:
             self.base_dist = base_dist
+            self._base_loc = None
+            self._base_cov = None
+
+    def _get_base_dist(self, device: torch.device) -> Distribution:
+        """Get base distribution on the specified device.
+
+        Args:
+            device: Device to place distribution on.
+
+        Returns:
+            Base distribution on the specified device.
+        """
+        # Default: N(0, I) on correct device
+        return torch.distributions.MultivariateNormal(
+            self._base_loc.to(device),
+            self._base_cov.to(device)
+        )
 
     def _augmented_dynamics(
         self,
@@ -110,7 +134,10 @@ class CNF(nn.Module):
         if not x.requires_grad and torch.is_grad_enabled():
             x = x.clone().requires_grad_(True)
 
-        # Initial state: [x, log_det=0]
+        # Ensure x is 2D: [batch, features]
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
         log_det_init = torch.zeros(
             x.shape[0], 1,
             device=x.device,
@@ -153,7 +180,8 @@ class CNF(nn.Module):
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
-        log_prob_z = self.base_dist.log_prob(z)
+        base_dist = self._get_base_dist(z.device)
+        log_prob_z = base_dist.log_prob(z)
         log_prob_x = log_prob_z + log_det
 
         return log_prob_x
@@ -167,8 +195,12 @@ class CNF(nn.Module):
         Returns:
             torch.Tensor: Samples with shape (num_samples, features).
         """
+        # Get device from model parameters
+        device = next(self.vf.parameters()).device
+
         # Sample z ~ p(z)
-        z = self.base_dist.sample((num_samples,))
+        base_dist = self._get_base_dist(device)
+        z = base_dist.sample((num_samples,))
 
         # Transform z -> x
         x, _ = self.forward(z, reverse=True)

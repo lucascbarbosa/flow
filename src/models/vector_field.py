@@ -44,16 +44,22 @@ class VectorField(nn.Module):
         """Sinusoidal time embedding.
 
         Args:
-            t (torch.Tensor): Time tensor with shape [batch, 1] or scalar.
+            t (torch.Tensor): Time tensor with shape [batch] or [batch, 1]
+                or scalar.
 
         Returns:
             embedded (torch.Tensor): Embedded time tensor with shape
                 [batch, time_embed_dim].
         """
-        # Expand to batch if necessary
+        # Handle different input shapes
         if t.dim() == 0:
+            # Scalar: convert to 1D
             t = t.unsqueeze(0)
+        elif t.dim() == 2:
+            # Shape [batch, 1]: squeeze to [batch]
+            t = t.squeeze(-1)
 
+        # Now t has shape [batch]
         batch_size = t.shape[0]
         device = t.device
 
@@ -67,9 +73,13 @@ class VectorField(nn.Module):
             * (-math.log(10000.0) / self.time_embed_dim)
         )
 
+        # Ensure t has shape [batch, 1] for broadcasting
+        # with div_term [time_embed_dim//2]
+        t = t.unsqueeze(-1)  # [batch] -> [batch, 1]
         t_emb = torch.zeros(batch_size, self.time_embed_dim, device=device)
-        t_emb[:, 0::2] = torch.sin(t.unsqueeze(-1) * div_term)
-        t_emb[:, 1::2] = torch.cos(t.unsqueeze(-1) * div_term)
+        # [batch, 1] * [time_embed_dim//2] -> [batch, time_embed_dim//2]
+        t_emb[:, 0::2] = torch.sin(t * div_term)
+        t_emb[:, 1::2] = torch.cos(t * div_term)
 
         return t_emb
 
