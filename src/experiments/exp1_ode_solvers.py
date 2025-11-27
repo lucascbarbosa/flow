@@ -46,9 +46,15 @@ def compare_solvers():
 
         print(f"\n=== Testando solver: {solver_key} ===")
 
-        # Modelo
+        # Modelo (moons dataset has 2 classes)
         vf = VectorField(features=2, hidden_dims=[64, 64], time_embed_dim=16)
-        model = NeuralODE(vf, solver=method, rtol=rtol, atol=atol).to(device)
+        model = NeuralODE(
+            vf,
+            solver=method,
+            rtol=rtol,
+            atol=atol,
+            num_classes=2
+        ).to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
         # Treinar

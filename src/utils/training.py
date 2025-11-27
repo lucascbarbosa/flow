@@ -72,13 +72,13 @@ def train_neural_ode(
     device: torch.device,
     num_epochs: int = 100
 ) -> None:
-    """Train Neural ODE to learn transformation from N(0, I) to data.
+    """Train Neural ODE for classification task.
 
-    The model learns to transform samples from a standard normal distribution
-    N(0, I) to match the target data distribution.
+    The model integrates the ODE and classifies the final state.
+    Returns both trajectory and logits, but only uses logits for training.
 
     Args:
-        model (NeuralODE): NeuralODE model.
+        model (NeuralODE): NeuralODE model with classification head.
 
         dataloader (DataLoader): DataLoader for training data.
 
@@ -89,35 +89,48 @@ def train_neural_ode(
         num_epochs (int): Number of training epochs.
     """
     model.train()
+    criterion = nn.CrossEntropyLoss()
 
     for epoch in range(num_epochs):
         total_loss = 0.0
         n_batches = 0
+        correct = 0
+        total_samples = 0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            x_target = batch.to(device)  # Target data
-            batch_size, n_features = x_target.shape
+            x_data, labels = batch
+            x_data = x_data.to(device)
+            labels = labels.to(device)
 
             optimizer.zero_grad()
 
-            # Sample initial conditions from Gaussian distribution N(0, I)
-            z = torch.randn(batch_size, n_features, device=device)
+            # Use data as initial condition
+            z = x_data
 
-            # Forward: integrate from t=0 to t=1
-            x_t = model(z)
-            x = x_t[-1]  # Final state after transformation
+            # Forward: integrate ODE and classify
+            # Returns trajectory and logits (trajectory kept for visualization)
+            _, logits = model(z)
 
-            # Loss: MMD² between transformed samples and target data
-            loss = mmd2_loss(x, x_target)
+            # Loss: Cross-entropy
+            loss = criterion(logits, labels)
 
             loss.backward()
             optimizer.step()
+
+            # Calculate accuracy
+            _, predicted = torch.max(logits.data, 1)
+            total_samples += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
             total_loss += loss.item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
+        accuracy = 100 * correct / total_samples
+        print(
+            f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}, "
+            f"Accuracy: {accuracy:.2f}%"
+        )
 
     return avg_loss
 
@@ -203,9 +216,9 @@ def count_nfe(
     original_vf = model.vf
     model.vf = counting_vf
 
-    # Forward pass
+    # Forward pass (model returns tuple of trajectory and logits)
     with torch.no_grad():
-        _ = model(x, t_span)
+        _, _ = model(x, t_span)
 
     # Get count
     nfe_count = counting_vf.nfe

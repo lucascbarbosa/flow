@@ -9,19 +9,43 @@ from src.models.vector_field import VectorField
 from typing import Optional, Tuple
 
 
+def _darken_color(color: np.ndarray, factor: float = 0.7) -> np.ndarray:
+    """Darken an RGBA color by multiplying RGB values by a factor.
+
+    Args:
+        color: RGBA color array with values in [0, 1].
+        factor: Darkening factor (0-1). Default is 0.7.
+
+    Returns:
+        Darkened RGBA color array.
+    """
+    darkened = color.copy()
+    darkened[:3] *= factor  # Only darken RGB, keep alpha
+    return darkened
+
+
 def plot_trajectories(
     model: NeuralODE,
-    z: torch.Tensor,
+    dataset: torch.Tensor | np.ndarray,
+    n_samples: int = 20,
     t_span: Optional[torch.Tensor] = None,
     n_points: int = 100,
     ax: Optional[Axes] = None
 ) -> Axes:
-    """Plot trajectories x(t) for different initial conditions.
+    """Plot trajectories x(t) from x(0) to x(1) for random dataset samples.
+
+    Shows trajectories starting from random samples in the dataset,
+    integrating from t=0 to t=1.
 
     Args:
         model (NeuralODE): NeuralODE model.
 
-        z (torch.Tensor): Initial conditions with shape (batch, 2).
+        dataset (torch.Tensor | np.ndarray): Dataset with shape
+            (n_samples, features) or (n_samples, features, ...).
+            If tuple (data, labels), extracts data.
+
+        n_samples (int): Number of random samples to plot.
+            Default is 20.
 
         t_span (torch.Tensor): Time points for integration.
 
@@ -35,55 +59,92 @@ def plot_trajectories(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-    if t_span is None:
-        t_span = torch.linspace(0, 1, n_points)
+    data = dataset.data
+    labels = dataset.labels
 
-    # Integrate ODE
+    # Sample random subset
+    n_total = data.shape[0]
+    n_plot = min(n_samples, n_total)
+    indices = torch.randperm(n_total)[:n_plot]
+    x_0 = data[indices].to(model.vf.net[0].weight.device)
+    sampled_labels = labels[indices]
+
+    if t_span is None:
+        t_span = torch.linspace(0, 1, n_points).to(x_0.device)
+
+    # Integrate ODE from x(0) to x(1)
     model.eval()
     with torch.no_grad():
-        x_t = model(z, t_span)
+        x_t, _ = model(x_0, t_span)
 
-    # Plot trajectories with legends for start, end, trajectories
+    # Plot trajectories with color coding by label
     x_t_np = x_t.cpu().numpy()
+    sampled_labels_np = sampled_labels.cpu().numpy()
 
-    for i in range(z.shape[0]):
-        # Only set label for the first trajectory for legend clarity
-        traj_label = "Trajectory" if i == 0 else None
-        start_label = "Start Point" if i == 0 else None
-        end_label = "End Point" if i == 0 else None
+    # Get unique labels and assign colors
+    unique_labels = np.unique(sampled_labels_np)
+    colors = plt.cm.get_cmap('tab10')(
+        np.linspace(0, 1, len(unique_labels))
+    )
+    # Darken colors for trajectories, x(0), and x(1)
+    label_to_color = {
+        label: _darken_color(colors[i])
+        for i, label in enumerate(unique_labels)
+    }
+
+    # Track which labels we've already added to legend for each class
+    start_plotted = {label: False for label in unique_labels}
+    end_plotted = {label: False for label in unique_labels}
+
+    for i in range(x_0.shape[0]):
+        label = sampled_labels_np[i]
+        color = label_to_color[label]
+
+        # Only set label for the first trajectory of each class
+        start_label = (
+            fr"$x_{label}(0)$" if not start_plotted[label] else None
+        )
+        end_label = (
+            fr"$x_{label}(1)$" if not end_plotted[label] else None
+        )
 
         ax.plot(
             x_t_np[:, i, 0],
             x_t_np[:, i, 1],
             alpha=0.6,
             linewidth=1.5,
-            color='blue',
-            label=traj_label,
+            color=color,
         )
-        # Mark start
+
+        # Mark start x(0) with same color
         ax.scatter(
             x_t_np[0, i, 0],
             x_t_np[0, i, 1],
-            color='green',
+            color=color,
             marker='o',
             s=50,
             zorder=5,
             label=start_label
         )
-        # Mark end
+        if start_label:
+            start_plotted[label] = True
+
+        # Mark end x(1) with same color
         ax.scatter(
             x_t_np[-1, i, 0],
             x_t_np[-1, i, 1],
-            color='red',
+            color=color,
             marker='s',
             s=50,
             zorder=5,
             label=end_label
         )
+        if end_label:
+            end_plotted[label] = True
 
     ax.set_xlabel(r'$x_1$')
     ax.set_ylabel(r'$x_2$')
-    ax.set_title('ODE Trajectories')
+    ax.set_title('Trajectories from x(0) to x(1)')
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
     ax.legend()
@@ -119,23 +180,15 @@ def plot_vector_field(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
+    # Get device from model
+    vf = model.vf
+    device = next(vf.parameters()).device
+
     # Convert t to tensor and extract scalar value for title
-    if isinstance(t, torch.Tensor):
-        if t.dim() == 0:
-            t_value = t.item()
-            t_tensor = t.to(torch.float32)
-        elif t.dim() == 1:
-            t_value = t[-1].item() if len(t) > 0 else t[0].item()
-            t_tensor = (
-                t[-1].to(torch.float32) if len(t) > 0
-                else t[0].to(torch.float32)
-            )
-        else:
-            t_value = t[0, -1].item()
-            t_tensor = t[0, -1].to(torch.float32)
-    else:
-        t_value = float(t)
-        t_tensor = torch.tensor(t_value, dtype=torch.float32)
+    t_value = float(t)
+    t_tensor = torch.tensor(
+        t_value, dtype=torch.float32, device=device
+    )
 
     # Create grid
     x = np.linspace(xlim[0], xlim[1], n_grid)
@@ -145,16 +198,12 @@ def plot_vector_field(
     # Convert to tensor
     grid_points = torch.tensor(
         np.stack([X.ravel(), Y.ravel()], axis=1),
-        dtype=torch.float32
+        dtype=torch.float32,
+        device=device
     )
 
     # Calculate vector field
     with torch.no_grad():
-        if hasattr(model, 'vf'):
-            vf = model.vf
-        else:
-            vf = model
-
         dx_dt = vf(t_tensor, grid_points).cpu().numpy()
 
     # Reshape
@@ -185,17 +234,24 @@ def plot_vector_field(
 
 def plot_transformation(
     model: NeuralODE,
-    n_samples: int = 1000,
+    n_samples: int = 20,
+    n_trajectory_points: int = 100,
     xlim: Tuple[float, float] = (-3, 3),
     ylim: Tuple[float, float] = (-3, 3),
     ax: Optional[Axes] = None
 ) -> Axes:
-    """Plot transformation z ~ N(0, I) -> x = φ(z, 1).
+    """Plot trajectories starting at z ~ N(0, I) and transforming to x.
+
+    Shows full trajectories from z(0) ~ N(0, I) to x(1) = φ(z, 1).
 
     Args:
         model (NeuralODE): NeuralODE model.
 
-        n_samples (int): Number of samples.
+        n_samples (int): Number of samples to plot trajectories for.
+            Default is 20.
+
+        n_trajectory_points (int): Number of points in each trajectory.
+            Default is 100.
 
         xlim (Tuple[float, float]): Limits in x direction.
 
@@ -209,31 +265,58 @@ def plot_transformation(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
+    # Get device from model
+    device = next(model.vf.parameters()).device
+
     # Sample z ~ N(0, I)
-    z = torch.randn(n_samples, 2)
+    z = torch.randn(n_samples, 2, device=device)
 
-    # Transform z -> x
+    # Create time span
+    t_span = torch.linspace(0, 1, n_trajectory_points, device=device)
+
+    # Transform z -> x (integrate ODE from t=0 to t=1)
+    model.eval()
     with torch.no_grad():
-        if hasattr(model, 'forward') and hasattr(model, 'base_dist'):
-            # CNF: use reverse=True
-            x, _ = model.forward(z, reverse=True)
-        else:
-            # NeuralODE: integrate from t=0 to t=1
-            x_t = model(z)
-            x = x_t[-1]
+        x_t, _ = model(z, t_span)
 
-    # Plot
-    z_np = z.cpu().numpy()
-    x_np = x.cpu().numpy()
+    # Plot trajectories
+    x_t_np = x_t.cpu().numpy()
 
-    ax.scatter(
-        z_np[:, 0], z_np[:, 1], alpha=0.5, s=10,
-        label='z ~ N(0,I)', color='blue'
-    )
-    ax.scatter(
-        x_np[:, 0], x_np[:, 1], alpha=0.5, s=10,
-        label='x = φ(z,1)', color='red'
-    )
+    for i in range(n_samples):
+        # Only set label for the first trajectory
+        traj_label = "Trajectory" if i == 0 else None
+        start_label = "z(0) ~ N(0,I)" if i == 0 else None
+        end_label = "x(1)" if i == 0 else None
+
+        # Plot trajectory path
+        ax.plot(
+            x_t_np[:, i, 0],
+            x_t_np[:, i, 1],
+            alpha=0.4,
+            linewidth=1.5,
+            color='blue',
+            label=traj_label,
+        )
+        # Mark start z(0)
+        ax.scatter(
+            x_t_np[0, i, 0],
+            x_t_np[0, i, 1],
+            color='green',
+            marker='o',
+            s=50,
+            zorder=5,
+            label=start_label
+        )
+        # Mark end x(1)
+        ax.scatter(
+            x_t_np[-1, i, 0],
+            x_t_np[-1, i, 1],
+            color='red',
+            marker='s',
+            s=50,
+            zorder=5,
+            label=end_label
+        )
 
     # Unit circle (reference)
     circle = Circle(
@@ -244,7 +327,7 @@ def plot_transformation(
 
     ax.set_xlabel(r'$x_1$')
     ax.set_ylabel(r'$x_2$')
-    ax.set_title('Transformation z -> x')
+    ax.set_title('Trajectories from z(0) ~ N(0,I) to x(1)')
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     ax.legend()
@@ -256,28 +339,50 @@ def plot_transformation(
 
 def plot_data_distribution(
     data: torch.Tensor | np.ndarray,
+    labels: Optional[torch.Tensor | np.ndarray] = None,
     ax: Optional[Axes] = None,
-    title: str = 'Data Distribution'
+    title: str = 'Data Distribution',
+    cmap: str = 'tab10'
 ) -> Axes:
     """Plot data distribution.
 
     Args:
         data (torch.Tensor | np.ndarray): Data tensor or array with shape
             (n_samples, 2).
+
+        labels (torch.Tensor | np.ndarray, optional): Labels tensor or array
+            with shape (n_samples,). If provided, points are colored by label.
+            Default is None.
+
         ax (Axes): Matplotlib axis.
 
         title (str): Plot title.
 
+        cmap (str): Colormap name for coloring by labels.
+            Default is 'tab10'.
+
     Returns:
         Axes: Matplotlib axis.
     """
-    if ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    data = data.cpu().numpy()
+    labels = labels.cpu().numpy()
 
-    if isinstance(data, torch.Tensor):
-        data = data.cpu().numpy()
+    # Get unique labels and assign colors
+    unique_labels = np.unique(labels)
+    colors = plt.cm.get_cmap(cmap)(np.linspace(0, 1, len(unique_labels)))
 
-    ax.scatter(data[:, 0], data[:, 1], alpha=0.5, s=10)
+    # Plot each label with different color
+    for i, label in enumerate(unique_labels):
+        mask = labels == label
+        ax.scatter(
+            data[mask, 0],
+            data[mask, 1],
+            alpha=0.5,
+            s=10,
+            color=colors[i],
+            label=f'Class {label}'
+        )
+    ax.legend()
     ax.set_xlabel(r'$x_1$')
     ax.set_ylabel(r'$x_2$')
     ax.set_title(title)

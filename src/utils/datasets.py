@@ -29,39 +29,49 @@ class Synthetic2D(Dataset):
 
         """
         if dataset_type == 'moons':
-            X, _ = make_moons(
+            X, y = make_moons(
                 n_samples=n_samples, noise=noise, random_state=42
             )
         elif dataset_type == 'circles':
-            X, _ = make_circles(
+            X, y = make_circles(
                 n_samples=n_samples,
                 noise=noise,
                 factor=0.5,
                 random_state=42
             )
         elif dataset_type == 'spirals':
-            X = self.make_spirals(
+            X, y = self.make_spirals(
                 n_samples=n_samples,
                 noise=noise,
                 random_state=42
             )
         self.data = torch.tensor(X, dtype=torch.float32)
+        self.labels = torch.tensor(y, dtype=torch.long)
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
-        """Get a sample from the dataset."""
-        return self.data[idx]
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Get a sample from the dataset.
+
+        Returns:
+            tuple: (data, label) where data has shape (features,) and
+                label is a scalar tensor.
+        """
+        return self.data[idx], self.labels[idx]
 
     def make_spirals(
         self,
         n_samples: int = 1000,
         noise: float = 0.05,
         random_state: int | None = None
-    ) -> torch.Tensor:
-        """Two intertwined spirals."""
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Two intertwined spirals.
+
+        Returns:
+            tuple: (X, y) where X is the data and y are the labels.
+        """
         if random_state is not None:
             np.random.seed(random_state)
         n = n_samples // 2
@@ -75,7 +85,12 @@ class Synthetic2D(Dataset):
         x2 = -r * np.cos(theta) + noise * np.random.randn(n)
         y2 = -r * np.sin(theta) + noise * np.random.randn(n)
         X = np.vstack([np.column_stack([x, y]), np.column_stack([x2, y2])])
-        return torch.tensor(X, dtype=torch.float32)
+        # Labels: first n samples are class 0, second n samples are class 1
+        y_labels = np.hstack([
+            np.zeros(n, dtype=np.int64),
+            np.ones(n, dtype=np.int64)
+        ])
+        return X, y_labels
 
 
 class MNISTReduced(Dataset):

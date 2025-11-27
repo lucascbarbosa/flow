@@ -91,7 +91,8 @@ class VectorField(nn.Module):
             # 1D tensor with single element: expand to batch
             t = t[0].expand(x.shape[0])
         elif t.shape[0] != x.shape[0]:
-            # If t has different batch size, assume it is the same for all batch
+            # If t has different batch size,
+            # assume it is the same for all batch
             t = t[0].expand(x.shape[0])
 
         # Time embedding
