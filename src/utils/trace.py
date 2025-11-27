@@ -11,6 +11,10 @@ def divergence_exact(
     """Calculate trace(∂f/∂x) exactly using autograd.
 
     WARNING: Cost O(d²) - only viable for low dimensions!
+    For high dimensions (d > 50), consider using divergence_hutchinson.
+
+    Optimized implementation: computes f(x) once, then for each output
+    dimension j, computes ∂f_j/∂x and extracts the j-th component (diagonal).
 
     Args:
         f (Callable[[torch.Tensor], torch.Tensor]): Function R^d -> R^d
@@ -23,25 +27,73 @@ def divergence_exact(
     """
     batch_size, dim = x.shape
 
-    # Compute f(x)
+    # Ensure x requires grad
+    x = x.requires_grad_(True)
+
+    # Compute f(x) once - this will be reused
     f_x = f(x)  # (batch, dim)
 
-    # For each dimension i, calculate ∂f_i/∂x_i
+    # Compute trace by summing diagonal elements
+    # For each output dimension j, compute ∂f_j/∂x and take j-th component
     trace = torch.zeros(batch_size, device=x.device, dtype=x.dtype)
 
-    for i in range(dim):
-        # Compute ∂f[:, i]/∂x
-        df_i = autograd.grad(
-            f_x[:, i].sum(),
+    for j in range(dim):
+        # Compute gradient of f_j with respect to x
+        # Using sum() to aggregate over batch for gradient computation
+        grad_fj = autograd.grad(
+            f_x[:, j].sum(),  # Sum over batch
             x,
             create_graph=True,
             retain_graph=True
         )[0]  # (batch, dim)
 
-        # Sum only the diagonal: ∂f_i/∂x_i
-        trace += df_i[:, i]
+        # Extract j-th component (diagonal element): ∂f_j/∂x_j
+        trace += grad_fj[:, j]  # (batch,)
 
     return trace
+
+
+def divergence(
+    f: Callable[[torch.Tensor], torch.Tensor],
+    x: torch.Tensor,
+    method: Literal['exact', 'hutchinson', 'auto'] = 'auto',
+    num_samples: int = 1,
+    distribution: Literal['rademacher', 'gaussian'] = 'rademacher',
+    exact_threshold: int = 50
+) -> torch.Tensor:
+    """Calculate trace(∂f/∂x) with automatic method selection.
+
+    Automatically chooses between exact and Hutchinson estimator based on
+    input dimension. For dimensions <= exact_threshold, uses exact method.
+    For higher dimensions, uses Hutchinson estimator for better performance.
+
+    Args:
+        f: Function R^d -> R^d (callable that accepts x and returns
+            (batch, d)).
+        x: Input tensor with shape (batch, d).
+        method: 'exact', 'hutchinson', or 'auto' (default: 'auto').
+        num_samples: Number of samples for Hutchinson estimator (default: 1).
+        distribution: 'rademacher' or 'gaussian' for Hutchinson.
+        exact_threshold: Dimension threshold for automatic method selection
+            (default: 50).
+
+    Returns:
+        trace: Trace of the Jacobian with shape (batch,).
+    """
+    _, dim = x.shape
+
+    if method == 'auto':
+        if dim <= exact_threshold:
+            method = 'exact'
+        else:
+            method = 'hutchinson'
+
+    if method == 'exact':
+        return divergence_exact(f, x)
+    elif method == 'hutchinson':
+        return divergence_hutchinson(f, x, num_samples, distribution)
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
 
 def divergence_hutchinson(

@@ -158,9 +158,13 @@ def count_nfe(
     original_vf = model.vf
     model.vf = counting_vf
 
-    # Forward pass (model returns tuple of trajectory and logits)
+    # Forward pass
+    # CNF forward takes (x, reverse), NeuralODE takes (x, t_span)
     with torch.no_grad():
-        _, _ = model(x, t_span)
+        if isinstance(model, CNF):
+            _, _ = model(x, reverse=False)
+        else:
+            _, _ = model(x, t_span)
 
     # Get count
     nfe_count = counting_vf.nfe
