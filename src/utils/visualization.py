@@ -7,7 +7,6 @@ from matplotlib.patches import Circle
 from src.models.neural_ode import NeuralODE
 from src.models.vector_field import VectorField
 from src.models.cnf import CNF
-from torchdiffeq import odeint
 from typing import Optional, Tuple, Union
 
 
@@ -238,9 +237,9 @@ def plot_transformation(
     """Plot trajectories starting at z ~ N(0, I) and transforming to x.
 
     Creates two plots:
-    - Left: Initial z samples from N(0, I) (no colors)
-    - Right: Final transformed state x (with label colors if NeuralODE,
-      without colors for CNF)
+    - Left: Initial z samples from N(0, I) (gray, no labels)
+    - Right: Final transformed state x (gray, no labels)
+      Note: True class labels are unknown when transforming from z ~ N(0, I)
 
     Works with both NeuralODE and CNF models.
 
@@ -286,45 +285,33 @@ def plot_transformation(
 
     model.eval()
     with torch.no_grad():
-        if isinstance(model, NeuralODE):
-            # NeuralODE: integrate from t=0 to t=1 (forward)
-            t_span = torch.linspace(0, 1, n_trajectory_points, device=device)
-            x_t, logits = model(z, t_span)
-            use_labels = model.classifier is not None
-            if use_labels:
-                # Get predicted labels from classifier
-                _, predicted_labels = torch.max(logits, 1)
-                final_labels = predicted_labels.cpu().numpy()
-        elif isinstance(model, CNF):
-            # CNF: integrate from t=1 to t=0 (reverse)
-            t_span = torch.linspace(
-                1.0, 0.0, n_trajectory_points, device=device
-            )
-
-            # Define dynamics function that uses CNF's vector field
-            def dynamics(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-                """ODE dynamics for CNF reverse transformation."""
-                return model.vf(t, x)
-
-            x_t = odeint(
-                dynamics,
-                z,
-                t_span,
-                method=model.method,
-                rtol=model.rtol,
-                atol=model.atol
-            )
-            use_labels = False
-        else:
-            raise TypeError(
-                f"model must be NeuralODE or CNF, got {type(model)}"
-            )
+        t_span = torch.linspace(
+            start=1.0,
+            end=0.0,
+            steps=n_trajectory_points,
+            device=device
+        )
+        x_t, _ = model(z, t_span, reverse=True)
 
     # Get initial and final states
     z_np = z.cpu().numpy()
-    x_final_np = x_t[-1].cpu().numpy()  # Final state
 
-    # LEFT PLOT: Initial z samples (no colors)
+    # Handle different return formats:
+    # - NeuralODE returns trajectory: [n_steps, n_samples, 2]
+    # - CNF returns only final state: [n_samples, 2]
+    if x_t.dim() == 3:
+        # Full trajectory from NeuralODE: extract final state
+        x_final_np = x_t[-1].cpu().numpy()  # [n_samples, 2]
+    elif x_t.dim() == 2:
+        # Already final state from CNF: use directly
+        x_final_np = x_t.cpu().numpy()  # [n_samples, 2]
+    else:
+        raise ValueError(
+            f"Unexpected x_t shape: {x_t.shape}. "
+            f"Expected 2D [n_samples, 2] or 3D [n_steps, n_samples, 2]"
+        )
+
+    # LEFT PLOT: Initial z samples (gray, no labels)
     ax_left.scatter(
         z_np[:, 0],
         z_np[:, 1],
@@ -350,37 +337,15 @@ def plot_transformation(
     ax_left.grid(True, alpha=0.3)
     ax_left.axis('equal')
 
-    # RIGHT PLOT: Final transformed state
-    if use_labels:
-        # With label colors (NeuralODE with classifier)
-        unique_labels = np.unique(final_labels)
-        colors = plt.cm.get_cmap('tab10')(
-            np.linspace(0, 1, len(unique_labels))
-        )
-        label_to_color = {
-            label: colors[i] for i, label in enumerate(unique_labels)
-        }
-
-        # Group points by label to avoid duplicate legend entries
-        for i, label in enumerate(unique_labels):
-            mask = final_labels == label
-            ax_right.scatter(
-                x_final_np[mask, 0],
-                x_final_np[mask, 1],
-                alpha=0.5,
-                s=10,
-                color=label_to_color[label],
-                label=f'Class {label}'
-            )
-        ax_right.legend()
-    else:
-        # Without colors (CNF or NeuralODE without classifier)
-        ax_right.scatter(
-            x_final_np[:, 0],
-            x_final_np[:, 1],
-            alpha=0.5,
-            s=10
-        )
+    # RIGHT PLOT: Final transformed state (gray, no labels)
+    # Note: We don't know true class labels when transforming from z ~ N(0, I)
+    ax_right.scatter(
+        x_final_np[:, 0],
+        x_final_np[:, 1],
+        color='gray',
+        alpha=0.5,
+        s=10
+    )
 
     ax_right.set_xlabel(r'$x_1$')
     ax_right.set_ylabel(r'$x_2$')

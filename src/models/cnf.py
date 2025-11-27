@@ -108,13 +108,14 @@ class CNF(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        t_span: torch.Tensor | None = None,
         reverse: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Transform x -> z (forward) or z -> x (reverse).
 
         Args:
             x (torch.Tensor): Input tensor with shape (batch, features).
-
+            t_span (torch.Tensor): Time points to evaluate.
             reverse (bool): If True, integrates from t=1 to t=0 (z -> x).
 
         Returns:
@@ -124,12 +125,15 @@ class CNF(nn.Module):
                 - log_det (torch.Tensor): Log determinant with shape
                     (batch, 1).
         """
-        if reverse:
-            # z -> x: integrate from t=1 to t=0
-            t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
+        if t_span is None:
+            if reverse:
+                # z -> x: integrate from t=1 to t=0
+                t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
+            else:
+                # x -> z: integrate from t=0 to t=1
+                t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
         else:
-            # x -> z: integrate from t=0 to t=1
-            t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
+            t_span = t_span.to(x.device)
 
         if not x.requires_grad and torch.is_grad_enabled():
             x = x.clone().requires_grad_(True)

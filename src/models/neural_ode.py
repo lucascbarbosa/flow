@@ -57,15 +57,18 @@ class NeuralODE(nn.Module):
 
     def forward(
         self,
-        z: torch.Tensor,
+        x: torch.Tensor,
         t_span: torch.Tensor | None = None,
+        reverse: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Integrate ODE from t=0 to t=1.
+        """Integrate ODE from t=0 to t=1 (forward) or t=1 to t=0 (reverse).
 
         Args:
-            z (torch.Tensor): Initial state with shape (batch, features).
+            x (torch.Tensor): Initial state with shape (batch, features).
             t_span (torch.Tensor, optional): Time points to evaluate.
-                Default is [0, 1].
+                Default is [0, 1] for forward or [1, 0] for reverse.
+            reverse (bool): If True, integrates from t=1 to t=0 (reverse).
+                Default is False (forward from t=0 to t=1).
 
         Returns:
             tuple[torch.Tensor, torch.Tensor]: Tuple containing:
@@ -75,13 +78,20 @@ class NeuralODE(nn.Module):
                     (batch, num_classes).
         """
         if t_span is None:
-            t_span = torch.linspace(0, 1, 100).to(z.device)
+            if reverse:
+                # z -> x: integrate from t=1 to t=0
+                t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
+            else:
+                # x -> z: integrate from t=0 to t=1
+                t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
+        else:
+            t_span = t_span.to(x.device)
 
         # Use odeint from torchdiffeq
         # The vector field must accept (t, x) where t is scalar
         x_t = odeint(
             self.vf,
-            z,
+            x,
             t_span,
             method=self.solver,
             rtol=self.rtol,
