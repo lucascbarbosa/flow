@@ -126,6 +126,9 @@ class CNF(nn.Module):
         if x.dim() == 1:
             x = x.unsqueeze(0)
 
+        # Ensure x is on the correct device
+        x = x.to(device)
+
         log_det_init = torch.zeros(
             x.shape[0], 1,
             device=device,
@@ -133,11 +136,14 @@ class CNF(nn.Module):
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
+        # Ensure t_span is on the correct device
+        t_span = t_span.to(device)
+
         # Regular odeint_adjoint handles both input and parameter gradients
         state_t = odeint_adjoint(
             self._augmented_dynamics,
-            state_init.to(device),
-            t_span.to(device),
+            state_init,
+            t_span,
             method=self.method,
             rtol=self.rtol,
             atol=self.atol,
