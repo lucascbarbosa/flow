@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from src.models.vector_field import VectorField
 from src.utils.trace import divergence_exact
-from torchdiffeq import odeint
+from torchdiffeq import odeint_adjoint
 from torch.distributions import Distribution
 from typing import Literal, Optional, Tuple
 
@@ -135,8 +135,8 @@ class CNF(nn.Module):
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
-        # Regular odeint handles both input and parameter gradients
-        state_t = odeint(
+        # Regular odeint_adjoint handles both input and parameter gradients
+        state_t = odeint_adjoint(
             self._augmented_dynamics,
             state_init,
             t_span,

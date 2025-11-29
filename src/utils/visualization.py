@@ -1,4 +1,5 @@
 """Visualization utilities."""
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -17,7 +18,8 @@ def plot_trajectories(
     n_samples: int = 20,
     t_span: Optional[torch.Tensor] = None,
     n_points: int = 100,
-    axes: Optional[Tuple[Axes, Axes]] = None
+    axes: Optional[Tuple[Axes, Axes]] = None,
+    save_path: Optional[str] = None
 ) -> Tuple[Axes, Axes]:
     """Plot trajectories x(t) from x(0) to x(1) for random dataset samples.
 
@@ -42,6 +44,9 @@ def plot_trajectories(
 
         axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
             left and right plots. If None, creates new figure.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Tuple[Axes, Axes]: Left and right matplotlib axes.
@@ -124,6 +129,18 @@ def plot_trajectories(
     ax_right.axis('equal')
     ax_right.legend()
 
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax_left.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
+
     return ax_left, ax_right
 
 
@@ -133,7 +150,8 @@ def plot_vector_field(
     ylim: Tuple[float, float] = (-2, 2),
     n_grid: int = 20,
     t: float = 0.5,
-    ax: Optional[Axes] = None
+    ax: Optional[Axes] = None,
+    save_path: Optional[str] = None
 ) -> Axes:
     """Plot vector field f(x, t) on a 2D grid.
 
@@ -150,6 +168,9 @@ def plot_vector_field(
         t (float): Time to evaluate.
 
         ax (Axes): Matplotlib axis.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Axes: Matplotlib axis.
@@ -209,6 +230,18 @@ def plot_vector_field(
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
 
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
+
     return ax
 
 
@@ -218,7 +251,8 @@ def plot_vector_field_realnvp(
     ylim: Tuple[float, float] = (-2, 2),
     n_grid: int = 20,
     direction: str = 'forward',
-    ax: Optional[Axes] = None
+    ax: Optional[Axes] = None,
+    save_path: Optional[str] = None
 ) -> Axes:
     """Plot transformation direction as a vector field for RealNVP.
 
@@ -244,6 +278,9 @@ def plot_vector_field_realnvp(
             Default is 'forward'.
 
         ax (Axes, optional): Matplotlib axis. If None, creates new figure.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Axes: Matplotlib axis.
@@ -314,6 +351,18 @@ def plot_vector_field_realnvp(
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
 
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
+
     return ax
 
 
@@ -323,7 +372,8 @@ def plot_transformation(
     n_trajectory_points: int = 100,
     xlim: Tuple[float, float] = (-3, 3),
     ylim: Tuple[float, float] = (-3, 3),
-    axes: Optional[Tuple[Axes, Axes]] = None
+    axes: Optional[Tuple[Axes, Axes]] = None,
+    save_path: Optional[str] = None
 ) -> Tuple[Axes, Axes]:
     """Plot trajectories starting at z ~ N(0, I) and transforming to x.
 
@@ -349,6 +399,9 @@ def plot_transformation(
 
         axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
             left and right plots. If None, creates new figure.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Tuple[Axes, Axes]: Left and right matplotlib axes.
@@ -446,6 +499,18 @@ def plot_transformation(
     ax_right.grid(True, alpha=0.3)
     ax_right.axis('equal')
 
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax_left.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
+
     return ax_left, ax_right
 
 
@@ -454,7 +519,8 @@ def plot_data_distribution(
     labels: Optional[torch.Tensor | np.ndarray] = None,
     ax: Optional[Axes] = None,
     title: str = 'Data Distribution',
-    cmap: str = 'tab10'
+    cmap: str = 'tab10',
+    save_path: Optional[str] = None
 ) -> Axes:
     """Plot data distribution.
 
@@ -472,6 +538,9 @@ def plot_data_distribution(
 
         cmap (str): Colormap name for coloring by labels.
             Default is 'tab10'.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Axes: Matplotlib axis.
@@ -519,6 +588,18 @@ def plot_data_distribution(
     ax.grid(True, alpha=0.3)
     ax.axis('equal')
 
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
+
     return ax
 
 
@@ -527,7 +608,8 @@ def plot_transformation_realnvp(
     n_samples: int = 1000,
     xlim: Tuple[float, float] = (-3, 3),
     ylim: Tuple[float, float] = (-3, 3),
-    axes: Optional[Tuple[Axes, Axes]] = None
+    axes: Optional[Tuple[Axes, Axes]] = None,
+    save_path: Optional[str] = None
 ) -> Tuple[Axes, Axes]:
     """Plot RealNVP transformation from base distribution to data distribution.
 
@@ -546,6 +628,9 @@ def plot_transformation_realnvp(
 
         axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
             left and right plots. If None, creates new figure.
+
+        save_path (str, optional): Path to save the figure. If provided,
+            saves the figure to the specified path. Default is None.
 
     Returns:
         Tuple[Axes, Axes]: Left and right matplotlib axes.
@@ -627,5 +712,17 @@ def plot_transformation_realnvp(
     ax_right.set_ylim(ylim)
     ax_right.grid(True, alpha=0.3)
     ax_right.axis('equal')
+
+    # Save figure if path is provided
+    if save_path is not None:
+        fig = ax_left.figure
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to: {save_path}")
 
     return ax_left, ax_right
