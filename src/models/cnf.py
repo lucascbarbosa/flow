@@ -114,12 +114,10 @@ class CNF(nn.Module):
         if t_span is None:
             if reverse:
                 # z -> x: integrate from t=1 to t=0
-                t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
+                t_span = torch.tensor([1., 0.], device=device, dtype=x.dtype)
             else:
                 # x -> z: integrate from t=0 to t=1
-                t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
-        else:
-            t_span = t_span.to(x.device)
+                t_span = torch.tensor([0., 1.], device=device, dtype=x.dtype)
 
         if not x.requires_grad and torch.is_grad_enabled():
             x = x.clone().requires_grad_(True)
@@ -130,7 +128,7 @@ class CNF(nn.Module):
 
         log_det_init = torch.zeros(
             x.shape[0], 1,
-            device=x.device,
+            device=device,
             dtype=x.dtype,
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
@@ -138,8 +136,8 @@ class CNF(nn.Module):
         # Regular odeint_adjoint handles both input and parameter gradients
         state_t = odeint_adjoint(
             self._augmented_dynamics,
-            state_init,
-            t_span,
+            state_init.to(device),
+            t_span.to(device),
             method=self.method,
             rtol=self.rtol,
             atol=self.atol,
