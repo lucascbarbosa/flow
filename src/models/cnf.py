@@ -43,10 +43,12 @@ class CNF(nn.Module):
         self.atol = atol
         if base_dist is None:
             # Prior: N(0, I)
+            # Get device from vector_field parameters to ensure consistency
+            vf_device = next(vector_field.parameters()).device
             features = vector_field.features
             self.base_dist = torch.distributions.MultivariateNormal(
-                torch.zeros(features).to(device),
-                torch.eye(features).to(device)
+                torch.zeros(features, device=vf_device),
+                torch.eye(features, device=vf_device)
             )
         else:
             self.base_dist = base_dist
@@ -146,9 +148,9 @@ class CNF(nn.Module):
         )
 
         # Final state
-        state_final = state_t[-1].to(device)  # (batch, features + 1)
-        z = state_final[:, :-1].to(device)  # (batch, features)
-        log_det = state_final[:, -1].to(device)  # (batch,)
+        state_final = state_t[-1]  # (batch, features + 1)
+        z = state_final[:, :-1]  # (batch, features)
+        log_det = state_final[:, -1]  # (batch,)
 
         return z, log_det
 
@@ -167,6 +169,16 @@ class CNF(nn.Module):
         # Transform x -> z
         z, log_det = self.forward(x, reverse=False)
 
+        # Ensure base_dist is on the same device as z
+        device = z.device
+        if self.base_dist.loc.device != device:
+            # Recreate base_dist on the correct device
+            features = z.shape[-1]
+            self.base_dist = torch.distributions.MultivariateNormal(
+                torch.zeros(features, device=device),
+                torch.eye(features, device=device)
+            )
+
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
         log_prob_z = self.base_dist.log_prob(z)
@@ -183,6 +195,16 @@ class CNF(nn.Module):
         Returns:
             torch.Tensor: Samples with shape (num_samples, features).
         """
+        # Ensure base_dist is on the same device as model parameters
+        device = next(self.vf.parameters()).device
+        if self.base_dist.loc.device != device:
+            # Recreate base_dist on the correct device
+            features = self.vf.features
+            self.base_dist = torch.distributions.MultivariateNormal(
+                torch.zeros(features, device=device),
+                torch.eye(features, device=device)
+            )
+
         # Sample z ~ p(z)
         z = self.base_dist.sample((num_samples,))
 
