@@ -2,6 +2,7 @@
 import math
 import torch
 import torch.nn as nn
+from torch.nn.utils import spectral_norm
 
 
 class VectorField(nn.Module):
@@ -31,9 +32,16 @@ class VectorField(nn.Module):
         dims = [features + time_embed_dim] + hidden_dims + [features]
         layers = []
         for i in range(len(dims) - 1):
-            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            linear = nn.Linear(dims[i], dims[i + 1])
+
+            if i < len(dims) - 1:  # No spectral norm on last layer
+                linear = spectral_norm(linear)
+
+            layers.append(linear)
+
             if i < len(dims) - 2:  # No activation on last layer
                 layers.append(nn.SiLU())
+
         self.net = nn.Sequential(*layers)
 
         # Initialization: last layer with small weights (σ=0.01)
@@ -96,9 +104,9 @@ class VectorField(nn.Module):
         # Ensure x is 2D
         if x.dim() == 1:
             x = x.unsqueeze(0)
-        
+
         batch_size = x.shape[0]
-        
+
         # Handle different t shapes from odeint
         if t.dim() == 0:
             # Scalar: expand to batch
@@ -199,9 +207,9 @@ class ResNetVF(VectorField):
         # Ensure x is 2D
         if x.dim() == 1:
             x = x.unsqueeze(0)
-        
+
         batch_size = x.shape[0]
-        
+
         # Handle different t shapes from odeint
         if t.dim() == 0:
             # Scalar: expand to batch

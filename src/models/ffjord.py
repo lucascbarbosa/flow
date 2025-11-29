@@ -149,7 +149,7 @@ class FFJORD(nn.Module):
             method='dopri5',
             rtol=1e-3,
             atol=1e-4,
-            adjoint_params=self.vf.parameters()
+            adjoint_params=tuple(self.vf.parameters())
         )
 
         # Final state

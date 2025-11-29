@@ -144,7 +144,7 @@ class CNF(nn.Module):
             method=self.method,
             rtol=self.rtol,
             atol=self.atol,
-            adjoint_params=self.vf.parameters()
+            adjoint_params=tuple(self.vf.parameters())
         )
 
         # Final state
