@@ -142,7 +142,8 @@ class CNF(nn.Module):
             t_span,
             method=self.method,
             rtol=self.rtol,
-            atol=self.atol
+            atol=self.atol,
+            adjoint_params=self.vf.parameters()
         )
 
         # Final state
