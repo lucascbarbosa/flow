@@ -13,8 +13,8 @@ def divergence_exact(
     WARNING: Cost O(d²) - only viable for low dimensions!
     For high dimensions (d > 50), consider using divergence_hutchinson.
 
-    Optimized implementation: computes f(x) once, then for each output
-    dimension j, computes ∂f_j/∂x and extracts the j-th component (diagonal).
+    Optimized implementation: computes the full Jacobian at once using
+    batched gradients, then extracts the trace via einsum.
 
     Args:
         f (Callable[[torch.Tensor], torch.Tensor]): Function R^d -> R^d
@@ -25,7 +25,10 @@ def divergence_exact(
     Returns:
         torch.Tensor: Trace of the Jacobian with shape (batch,).
     """
-    batch_size, dim = x.shape
+    # Create identity matrix for batched gradient computation
+    identity = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
+    grad_outputs = identity.expand(*x.shape, -1).movedim(-1, 0)
+    # grad_outputs shape: (dim, batch, dim)
 
     # Ensure x requires grad
     x = x.requires_grad_(True)
@@ -33,23 +36,17 @@ def divergence_exact(
     # Compute f(x) once - this will be reused
     f_x = f(x)  # (batch, dim)
 
-    # Compute trace by summing diagonal elements
-    # For each output dimension j, compute ∂f_j/∂x and take j-th component
-    trace = torch.zeros(batch_size, device=x.device, dtype=x.dtype)
+    # Compute full Jacobian using batched gradients
+    (jacobian,) = torch.autograd.grad(
+        f_x,
+        x,
+        grad_outputs,
+        create_graph=True,
+        is_grads_batched=True
+    )  # (dim, batch, dim)
 
-    for j in range(dim):
-        # Compute gradient of f_j with respect to x
-        # Using sum() to aggregate over batch for gradient computation
-        grad_fj = autograd.grad(
-            f_x[:, j].sum(),  # Sum over batch
-            x,
-            create_graph=True,
-            retain_graph=True
-        )[0]  # (batch, dim)
-
-        # Extract j-th component (diagonal element): ∂f_j/∂x_j
-        trace += grad_fj[:, j]  # (batch,)
-
+    # Extract trace: sum over diagonal elements
+    trace = torch.einsum("i...i", jacobian)  # (batch,)
     return trace
 
 
@@ -92,8 +89,6 @@ def divergence(
         return divergence_exact(f, x)
     elif method == 'hutchinson':
         return divergence_hutchinson(f, x, num_samples, distribution)
-    else:
-        raise ValueError(f"Unknown method: {method}")
 
 
 def divergence_hutchinson(
@@ -142,8 +137,6 @@ def divergence_hutchinson(
             epsilon = torch.randn(
                 batch_size, dim, device=x.device, dtype=x.dtype
             )
-        else:
-            raise ValueError(f"Unknown distribution: {distribution}")
 
         # Compute ε^T * f(x)
         vTf = (epsilon * f_x).sum(dim=-1)  # (batch,)

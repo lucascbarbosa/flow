@@ -8,21 +8,7 @@ from src.models.neural_ode import NeuralODE
 from src.models.vector_field import VectorField
 from src.models.cnf import CNF
 from typing import Optional, Tuple, Union
-
-
-def _darken_color(color: np.ndarray, factor: float = 0.7) -> np.ndarray:
-    """Darken an RGBA color by multiplying RGB values by a factor.
-
-    Args:
-        color: RGBA color array with values in [0, 1].
-        factor: Darkening factor (0-1). Default is 0.7.
-
-    Returns:
-        Darkened RGBA color array.
-    """
-    darkened = color.copy()
-    darkened[:3] *= factor  # Only darken RGB, keep alpha
-    return darkened
+from zuko.flows import RealNVP
 
 
 def plot_trajectories(
@@ -226,6 +212,111 @@ def plot_vector_field(
     return ax
 
 
+def plot_vector_field_realnvp(
+    flow: RealNVP,
+    xlim: Tuple[float, float] = (-2, 2),
+    ylim: Tuple[float, float] = (-2, 2),
+    n_grid: int = 20,
+    direction: str = 'forward',
+    ax: Optional[Axes] = None
+) -> Axes:
+    """Plot transformation direction as a vector field for RealNVP.
+
+    RealNVP doesn't have a continuous vector field like NeuralODEs.
+    This function visualizes the transformation direction as displacement
+    vectors at grid points.
+
+    Args:
+        flow (RealNVP): Zuko flow model (returns a Distribution when called).
+
+        xlim (Tuple[float, float]): Limits in x direction.
+            Default is (-2, 2).
+
+        ylim (Tuple[float, float]): Limits in y direction.
+            Default is (-2, 2).
+
+        n_grid (int): Number of grid points per dimension.
+            Default is 20.
+
+        direction (str): Transformation direction to visualize.
+            'forward' shows x -> z transformation (data to base space).
+            'inverse' shows z -> x transformation (base to data space).
+            Default is 'forward'.
+
+        ax (Axes, optional): Matplotlib axis. If None, creates new figure.
+
+    Returns:
+        Axes: Matplotlib axis.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+    # Get the distribution from the flow (unconditional)
+    flow.eval()
+    device = next(flow.parameters()).device
+
+    with torch.no_grad():
+        dist = flow(None)
+        transform = dist.transform
+
+        # Create grid
+        x = np.linspace(xlim[0], xlim[1], n_grid)
+        y = np.linspace(ylim[0], ylim[1], n_grid)
+        X, Y = np.meshgrid(x, y)
+
+        # Convert to tensor
+        grid_points = torch.tensor(
+            np.stack([X.ravel(), Y.ravel()], axis=1),
+            dtype=torch.float32,
+            device=device
+        )
+
+        if direction == 'forward':
+            # Forward transformation: x -> z
+            # Show displacement vectors from x to z
+            z = transform(grid_points)
+            displacement = z - grid_points
+
+            title = 'RealNVP Forward Transform (x → z)'
+        elif direction == 'inverse':
+            # Inverse transformation: z -> x
+            # Show displacement vectors from z to x
+            x_transformed = transform.inv(grid_points)
+            displacement = x_transformed - grid_points
+
+            title = 'RealNVP Inverse Transform (z → x)'
+        else:
+            raise ValueError(
+                f"direction must be 'forward' or 'inverse', got {direction}"
+            )
+
+        # Reshape displacement to grid
+        displacement_np = displacement.cpu().numpy()
+        U = displacement_np[:, 0].reshape(X.shape)
+        V = displacement_np[:, 1].reshape(Y.shape)
+
+        # Normalize for visualization
+        magnitude = np.sqrt(U**2 + V**2)
+        U_norm = U / (magnitude + 1e-8)
+        V_norm = V / (magnitude + 1e-8)
+
+        # Plot vector field
+        ax.quiver(
+            X, Y, U_norm, V_norm, magnitude,
+            cmap='viridis', scale=20, width=0.005, alpha=0.7
+        )
+
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
+    ax.set_title(title)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.grid(True, alpha=0.3)
+    ax.axis('equal')
+
+    return ax
+
+
 def plot_transformation(
     model: Union[NeuralODE, CNF],
     n_samples: int = 20,
@@ -349,7 +440,7 @@ def plot_transformation(
 
     ax_right.set_xlabel(r'$x_1$')
     ax_right.set_ylabel(r'$x_2$')
-    ax_right.set_title('Final state z(1)')
+    ax_right.set_title('Final state x (transformed)')
     ax_right.set_xlim(xlim)
     ax_right.set_ylim(ylim)
     ax_right.grid(True, alpha=0.3)
@@ -432,7 +523,7 @@ def plot_data_distribution(
 
 
 def plot_transformation_realnvp(
-    flow,
+    flow: RealNVP,
     n_samples: int = 1000,
     xlim: Tuple[float, float] = (-3, 3),
     ylim: Tuple[float, float] = (-3, 3),
@@ -445,7 +536,7 @@ def plot_transformation_realnvp(
     - Right: Final transformed state x
 
     Args:
-        flow: Zuko flow model (returns a Distribution when called).
+        flow (RealNVP): Zuko flow model (returns a Distribution when called).
 
         n_samples (int): Number of samples to plot. Default is 1000.
 

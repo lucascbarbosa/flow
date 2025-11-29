@@ -3,9 +3,11 @@ import torch
 import torch.nn as nn
 from src.models.cnf import CNF
 from src.models.neural_ode import NeuralODE
+from src.models.ffjord import FFJORD
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Optional
+from zuko.flows import RealNVP
 
 
 def train_neural_ode(
@@ -125,7 +127,7 @@ def train_cnf(
 
 
 def train_realnvp(
-    flow,
+    flow: RealNVP,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
@@ -134,7 +136,7 @@ def train_realnvp(
     """Train RealNVP flow using negative log-likelihood.
 
     Args:
-        flow: Zuko RealNVP flow model.
+        flow (RealNVP): Zuko RealNVP flow model.
         dataloader (DataLoader): DataLoader for training data.
         optimizer (Optimizer): Optimizer for training.
         device (Device): Device to run training on.
@@ -146,13 +148,20 @@ def train_realnvp(
         total_loss = 0.0
         n_batches = 0
 
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            x = batch[0].to(device)
-            c = batch[1].to(device)
+        for batch in tqdm(
+            dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"
+        ):
+            # Extract data from batch (handle both single-tensor and tuple)
+            if isinstance(batch, (list, tuple)):
+                x = batch[0].to(device)
+            else:
+                x = batch.to(device)
+
+            # RealNVP models in this codebase don't use context, pass None
             optimizer.zero_grad()
 
             # Calculate log-likelihood
-            log_prob = flow(c).log_prob(x)
+            log_prob = flow(None).log_prob(x)
 
             # Loss: negative log-likelihood
             loss = -log_prob.mean()
@@ -169,6 +178,93 @@ def train_realnvp(
 
         avg_loss = total_loss / n_batches
         print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
+
+
+def train_ffjord(
+    model: FFJORD,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    num_epochs: int = 100,
+    lambda_ke: float = 0.01,
+    warmup_epochs: int = 5
+) -> None:
+    """Train FFJORD using negative log-likelihood with optional kinetic energy regularization.
+
+    Args:
+        model (FFJORD): FFJORD model.
+        dataloader (DataLoader): DataLoader for training data.
+        optimizer (Optimizer): Optimizer for training.
+        device (Device): Device to run training on.
+        num_epochs (int): Number of training epochs.
+        lambda_ke (float): Weight for kinetic energy regularization. Default is 0.01.
+        warmup_epochs (int): Number of epochs for linear learning rate warmup. Default is 5.
+    """
+    model.train()
+    initial_lr = optimizer.param_groups[0]['lr']
+
+    for epoch in range(num_epochs):
+        # Linear warmup for learning rate
+        if epoch < warmup_epochs:
+            lr = initial_lr * (epoch + 1) / warmup_epochs
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
+        
+        total_loss = 0.0
+        total_nll = 0.0
+        total_ke = 0.0
+        n_batches = 0
+
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+            # Extract data from batch
+            if isinstance(batch, (list, tuple)):
+                x = batch[0].to(device)
+            else:
+                x = batch.to(device)
+
+            optimizer.zero_grad()
+
+            # Calculate log-likelihood
+            log_prob = model.log_prob(x)
+            nll = -log_prob.mean()
+
+            # Optional: Kinetic energy regularization
+            # KE = 0.5 * ||f(x, t)||^2
+            ke_loss = 0.0
+            if lambda_ke > 0:
+                # Sample random time points
+                t = torch.rand(x.shape[0], device=device)
+                x_requires_grad = x.requires_grad_(True)
+                
+                # Compute vector field
+                dx_dt = model.vf(t, x_requires_grad)
+                
+                # Kinetic energy: 0.5 * ||dx_dt||^2
+                ke_loss = 0.5 * (dx_dt ** 2).sum(dim=-1).mean()
+
+            # Total loss
+            loss = nll + lambda_ke * ke_loss
+
+            loss.backward()
+
+            # Gradient clipping (recommended for FFJORD)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+            optimizer.step()
+
+            total_loss += loss.item()
+            total_nll += nll.item()
+            total_ke += ke_loss.item() if lambda_ke > 0 else 0.0
+            n_batches += 1
+
+        avg_loss = total_loss / n_batches
+        avg_nll = total_nll / n_batches
+        avg_ke = total_ke / n_batches if lambda_ke > 0 else 0.0
+        
+        if lambda_ke > 0:
+            print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}, KE: {avg_ke:.4f}")
+        else:
+            print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}")
 
 
 class CountingVectorField(nn.Module):

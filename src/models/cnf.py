@@ -8,6 +8,9 @@ from torch.distributions import Distribution
 from typing import Literal, Optional, Tuple
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class CNF(nn.Module):
     """Continuous Normalizing Flow with exact trace computation."""
     def __init__(
@@ -40,30 +43,13 @@ class CNF(nn.Module):
         self.atol = atol
         if base_dist is None:
             # Prior: N(0, I)
-            # Store parameters separately so they can be moved to device
             features = vector_field.features
-            self.register_buffer('_base_loc', torch.zeros(features))
-            self.register_buffer('_base_cov', torch.eye(features))
-            self.base_dist = None
+            self.base_dist = torch.distributions.MultivariateNormal(
+                torch.zeros(features).to(device),
+                torch.eye(features).to(device)
+            ).to(device)
         else:
-            self.base_dist = base_dist
-            self._base_loc = None
-            self._base_cov = None
-
-    def _get_base_dist(self, device: torch.device) -> Distribution:
-        """Get base distribution on the specified device.
-
-        Args:
-            device: Device to place distribution on.
-
-        Returns:
-            Base distribution on the specified device.
-        """
-        # Default: N(0, I) on correct device
-        return torch.distributions.MultivariateNormal(
-            self._base_loc.to(device),
-            self._base_cov.to(device)
-        )
+            self.base_dist = base_dist.to(device)
 
     def _augmented_dynamics(
         self,
@@ -184,8 +170,7 @@ class CNF(nn.Module):
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
-        base_dist = self._get_base_dist(z.device)
-        log_prob_z = base_dist.log_prob(z)
+        log_prob_z = self.base_dist.log_prob(z)
         log_prob_x = log_prob_z + log_det
 
         return log_prob_x
@@ -199,12 +184,8 @@ class CNF(nn.Module):
         Returns:
             torch.Tensor: Samples with shape (num_samples, features).
         """
-        # Get device from model parameters
-        device = next(self.vf.parameters()).device
-
         # Sample z ~ p(z)
-        base_dist = self._get_base_dist(device)
-        z = base_dist.sample((num_samples,))
+        z = self.base_dist.sample((num_samples,))
 
         # Transform z -> x
         x, _ = self.forward(z, reverse=True)
