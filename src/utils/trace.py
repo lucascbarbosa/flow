@@ -30,10 +30,9 @@ def divergence_exact(
     grad_outputs = identity.expand(*x.shape, -1).movedim(-1, 0)
     # grad_outputs shape: (dim, batch, dim)
 
-    # Ensure x requires grad
-    x = x.requires_grad_(True)
+    if not x.requires_grad:
+        x = x.clone().requires_grad_(True)
 
-    # Compute f(x) once - this will be reused
     f_x = f(x)  # (batch, dim)
 
     # Compute full Jacobian using batched gradients

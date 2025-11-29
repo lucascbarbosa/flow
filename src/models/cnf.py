@@ -71,20 +71,14 @@ class CNF(nn.Module):
             torch.Tensor: Derivative with shape (batch, features + 1).
         """
         x = state[:, :-1]  # (batch, features)
-        if not x.requires_grad:
-            # 1. Create a detached leaf that tracks gradients
-            x_detached = x.detach()
-            x_detached.requires_grad_(True)
 
-            # 2. Compute trace within enable_grad context
-            with torch.enable_grad():
-                trace = divergence_exact(lambda x_: self.vf(t, x_), x_detached)
+        x = x.requires_grad_(True)
 
-            # 3. Compute vector field normally
-            dx_dt = self.vf(t, x)
+        # Compute vector field
+        dx_dt = self.vf(t, x)
 
-        else:
-            dx_dt = self.vf(t, x)
+        # Compute trace of the Jacobian using exact method
+        with torch.enable_grad():
             trace = divergence_exact(lambda x_: self.vf(t, x_), x)
 
         dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
@@ -122,9 +116,6 @@ class CNF(nn.Module):
                 # x -> z: integrate from t=0 to t=1
                 t_span = torch.tensor([0., 1.], device=device, dtype=x.dtype)
 
-        if not x.requires_grad and torch.is_grad_enabled():
-            x = x.clone().requires_grad_(True)
-
         # Ensure x is 2D: [batch, features]
         if x.dim() == 1:
             x = x.unsqueeze(0)
@@ -142,7 +133,8 @@ class CNF(nn.Module):
         # Ensure t_span is on the correct device
         t_span = t_span.to(device)
 
-        # Regular odeint_adjoint handles both input and parameter gradients
+        # odeint_adjoint handles both input and parameter gradients
+        # automatically. No need to specify adjoint_params.
         state_t = odeint_adjoint(
             self._augmented_dynamics,
             state_init,
@@ -169,9 +161,8 @@ class CNF(nn.Module):
         Returns:
             torch.Tensor: Log probability with shape (batch,).
         """
-        # Ensure x requires grad for odeint_adjoint to work properly
-        if not x.requires_grad:
-            x = x.clone().requires_grad_(True)
+        if torch.is_grad_enabled() and not x.requires_grad:
+            x = x.requires_grad_(True)
 
         # Transform x -> z
         z, log_det = self.forward(x, reverse=False)
