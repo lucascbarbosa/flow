@@ -47,9 +47,9 @@ class CNF(nn.Module):
             self.base_dist = torch.distributions.MultivariateNormal(
                 torch.zeros(features).to(device),
                 torch.eye(features).to(device)
-            ).to(device)
+            )
         else:
-            self.base_dist = base_dist.to(device)
+            self.base_dist = base_dist
 
     def _augmented_dynamics(
         self,
