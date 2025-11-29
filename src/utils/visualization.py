@@ -531,12 +531,7 @@ class Synthetic2DViz:
         save_path: Optional[str]
     ) -> Tuple[Axes, Axes]:
         """Helper method for RealNVP transformation visualization."""
-        if axes is None:
-            fig, (ax_left, ax_right) = plt.subplots(
-                1, 2, figsize=(16, 8)
-            )
-        else:
-            ax_left, ax_right = axes
+        ax_left, ax_right = axes
 
         # Get the distribution from the flow (unconditional)
         flow.eval()

@@ -189,7 +189,7 @@ def train_ffjord(
     lambda_ke: float = 0.01,
     warmup_epochs: int = 5
 ) -> None:
-    """Train FFJORD using negative log-likelihood with optional kinetic energy regularization.
+    """Train FFJORD using NLL with regularization.
 
     Args:
         model (FFJORD): FFJORD model.
@@ -197,8 +197,10 @@ def train_ffjord(
         optimizer (Optimizer): Optimizer for training.
         device (Device): Device to run training on.
         num_epochs (int): Number of training epochs.
-        lambda_ke (float): Weight for kinetic energy regularization. Default is 0.01.
-        warmup_epochs (int): Number of epochs for linear learning rate warmup. Default is 5.
+        lambda_ke (float): Weight for kinetic energy regularization.
+            Default is 0.01.
+        warmup_epochs (int): Number of epochs for linear learning rate warmup.
+            Default is 5.
     """
     model.train()
     initial_lr = optimizer.param_groups[0]['lr']
@@ -209,18 +211,14 @@ def train_ffjord(
             lr = initial_lr * (epoch + 1) / warmup_epochs
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
-        
+
         total_loss = 0.0
         total_nll = 0.0
         total_ke = 0.0
         n_batches = 0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            # Extract data from batch
-            if isinstance(batch, (list, tuple)):
-                x = batch[0].to(device)
-            else:
-                x = batch.to(device)
+            x = batch[0].to(device)
 
             optimizer.zero_grad()
 
@@ -235,10 +233,10 @@ def train_ffjord(
                 # Sample random time points
                 t = torch.rand(x.shape[0], device=device)
                 x_requires_grad = x.requires_grad_(True)
-                
+
                 # Compute vector field
                 dx_dt = model.vf(t, x_requires_grad)
-                
+
                 # Kinetic energy: 0.5 * ||dx_dt||^2
                 ke_loss = 0.5 * (dx_dt ** 2).sum(dim=-1).mean()
 
@@ -260,21 +258,32 @@ def train_ffjord(
         avg_loss = total_loss / n_batches
         avg_nll = total_nll / n_batches
         avg_ke = total_ke / n_batches if lambda_ke > 0 else 0.0
-        
+
         if lambda_ke > 0:
-            print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}, KE: {avg_ke:.4f}")
+            print(
+                f"Epoch {epoch + 1}, "
+                f"Loss: {avg_loss:.4f}, "
+                f"NLL: {avg_nll:.4f}, "
+                f"KE: {avg_ke:.4f}"
+            )
         else:
-            print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}, NLL: {avg_nll:.4f}")
+            print(
+                f"Epoch {epoch + 1}, "
+                f"Loss: {avg_loss:.4f}, "
+                f"NLL: {avg_nll:.4f}"
+            )
 
 
 class CountingVectorField(nn.Module):
     """Wrapper module that counts function evaluations."""
     def __init__(self, vf: nn.Module):
+        """."""
         super().__init__()
         self.vf = vf
         self.nfe = 0
 
     def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass."""
         self.nfe += 1
         return self.vf(t, x)
 

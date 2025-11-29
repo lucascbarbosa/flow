@@ -44,7 +44,7 @@ class FFJORD(nn.Module):
             self.base_dist = torch.distributions.MultivariateNormal(
                 torch.zeros(features).to(device),
                 torch.eye(features).to(device)
-            ).to(device)
+            )
         else:
             self.base_dist = base_dist.to(device)
 
@@ -68,19 +68,22 @@ class FFJORD(nn.Module):
         """
         x = state[:, :-1]  # (batch, features)
 
-        # Enable gradients for x
-        x = x.requires_grad_(True)
+        # Ensure x requires grad for divergence computation
+        if not x.requires_grad:
+            x = x.requires_grad_(True)
 
         # Compute vector field
         dx_dt = self.vf(t, x)  # (batch, features)
 
         # Compute trace of the Jacobian using Hutchinson estimator
-        trace = divergence_hutchinson(
-            lambda x: self.vf(t, x),
-            x,
-            num_samples=self.num_samples,
-            distribution=self.distribution
-        )  # (batch,)
+        # Wrap in enable_grad to ensure gradient computation works properly
+        with torch.enable_grad():
+            trace = divergence_hutchinson(
+                lambda x: self.vf(t, x),
+                x,
+                num_samples=self.num_samples,
+                distribution=self.distribution
+            )  # (batch,)
 
         # d(log_det)/dt = -trace (note the sign!)
         dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
@@ -117,19 +120,24 @@ class FFJORD(nn.Module):
         else:
             t_span = t_span.to(x.device)
 
-        if not x.requires_grad and torch.is_grad_enabled():
-            x = x.clone().requires_grad_(True)
-
         # Ensure x is 2D: [batch, features]
         if x.dim() == 1:
             x = x.unsqueeze(0)
 
+        # Ensure x requires grad for proper gradient tracking through ODE
+        if torch.is_grad_enabled():
+            if not x.requires_grad:
+                x = x.clone().requires_grad_(True)
+
         # Initial state: [x, log_det=0]
+        # log_det_init should also require grad to maintain gradient flow
+        # even though it starts at 0, it will accumulate gradients during ODE integration
         log_det_init = torch.zeros(
             x.shape[0],
             1,
             device=x.device,
-            dtype=x.dtype
+            dtype=x.dtype,
+            requires_grad=False
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
@@ -140,7 +148,8 @@ class FFJORD(nn.Module):
             t_span,
             method='dopri5',
             rtol=1e-3,
-            atol=1e-4
+            atol=1e-4,
+            adjoint_params=self.vf.parameters()
         )
 
         # Final state

@@ -93,17 +93,43 @@ class VectorField(nn.Module):
         Returns:
             dx_dt (torch.Tensor): Output tensor with shape [batch, features].
         """
+        # Ensure x is 2D
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+        
+        batch_size = x.shape[0]
+        
         # Handle different t shapes from odeint
         if t.dim() == 0:
             # Scalar: expand to batch
-            t = t.expand(x.shape[0])
-        elif t.dim() == 1 and t.shape[0] == 1:
-            # 1D tensor with single element: expand to batch
-            t = t[0].expand(x.shape[0])
-        elif t.shape[0] != x.shape[0]:
-            # If t has different batch size,
-            # assume it is the same for all batch
-            t = t[0].expand(x.shape[0])
+            t = t.expand(batch_size)
+        elif t.dim() == 1:
+            if t.shape[0] == 1:
+                # 1D tensor with single element: expand to batch
+                t = t[0].expand(batch_size)
+            elif t.shape[0] != batch_size:
+                # If t has different batch size,
+                # assume it is the same for all batch
+                t = t[0].expand(batch_size)
+            # If t.shape[0] == batch_size, keep as is
+        elif t.dim() == 2:
+            # Shape [batch, 1] or [1, batch]: squeeze and handle
+            if t.shape[0] == 1 and t.shape[1] == batch_size:
+                t = t.squeeze(0)
+            elif t.shape[0] == batch_size and t.shape[1] == 1:
+                t = t.squeeze(1)
+            elif t.shape[0] == 1:
+                t = t[0, 0].expand(batch_size)
+            else:
+                t = t[:, 0]  # Take first column if [batch, 1]
+
+        # Ensure t is 1D with shape [batch_size]
+        if t.dim() != 1 or t.shape[0] != batch_size:
+            # Fallback: use first element and expand
+            if t.dim() == 0:
+                t = t.expand(batch_size)
+            else:
+                t = t.flatten()[0].expand(batch_size)
 
         # Time embedding
         t_emb = self.time_embedding(t)
@@ -170,12 +196,45 @@ class ResNetVF(VectorField):
 
     def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """Forward with skip connections."""
-        # Time embedding
+        # Ensure x is 2D
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+        
+        batch_size = x.shape[0]
+        
+        # Handle different t shapes from odeint
         if t.dim() == 0:
-            t = t.expand(x.shape[0])
-        elif t.shape[0] != x.shape[0]:
-            t = t[0].expand(x.shape[0])
+            # Scalar: expand to batch
+            t = t.expand(batch_size)
+        elif t.dim() == 1:
+            if t.shape[0] == 1:
+                # 1D tensor with single element: expand to batch
+                t = t[0].expand(batch_size)
+            elif t.shape[0] != batch_size:
+                # If t has different batch size,
+                # assume it is the same for all batch
+                t = t[0].expand(batch_size)
+            # If t.shape[0] == batch_size, keep as is
+        elif t.dim() == 2:
+            # Shape [batch, 1] or [1, batch]: squeeze and handle
+            if t.shape[0] == 1 and t.shape[1] == batch_size:
+                t = t.squeeze(0)
+            elif t.shape[0] == batch_size and t.shape[1] == 1:
+                t = t.squeeze(1)
+            elif t.shape[0] == 1:
+                t = t[0, 0].expand(batch_size)
+            else:
+                t = t[:, 0]  # Take first column if [batch, 1]
 
+        # Ensure t is 1D with shape [batch_size]
+        if t.dim() != 1 or t.shape[0] != batch_size:
+            # Fallback: use first element and expand
+            if t.dim() == 0:
+                t = t.expand(batch_size)
+            else:
+                t = t.flatten()[0].expand(batch_size)
+
+        # Time embedding
         t_emb = self.time_embedding(t)
         x_t = torch.cat([x, t_emb], dim=-1)
 

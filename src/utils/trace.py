@@ -115,8 +115,13 @@ def divergence_hutchinson(
     """
     batch_size, dim = x.shape
 
-    # Enable gradients
-    x = x.requires_grad_(True)
+    # Enable gradients if not already enabled
+    # Use clone if x doesn't require grad to ensure proper graph connection
+    if not x.requires_grad:
+        x = x.clone().requires_grad_(True)
+    else:
+        # If x already requires grad, ensure it's enabled (in case it was disabled)
+        x = x.requires_grad_(True)
 
     # Compute f(x)
     f_x = f(x)  # (batch, dim)
