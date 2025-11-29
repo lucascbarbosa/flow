@@ -146,9 +146,9 @@ class CNF(nn.Module):
         )
 
         # Final state
-        state_final = state_t[-1]  # (batch, features + 1)
-        z = state_final[:, :-1]  # (batch, features)
-        log_det = state_final[:, -1]  # (batch,)
+        state_final = state_t[-1].to(device)  # (batch, features + 1)
+        z = state_final[:, :-1].to(device)  # (batch, features)
+        log_det = state_final[:, -1].to(device)  # (batch,)
 
         return z, log_det
 
