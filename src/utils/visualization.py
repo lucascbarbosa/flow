@@ -372,7 +372,7 @@ class Synthetic2DViz:
         cls,
         model: Union[NeuralODE, CNF, RealNVP],
         n_samples: int = 20,
-        n_trajectory_points: int = 100,
+        n_points: int = 100,
         xlim: Tuple[float, float] = (-3, 3),
         ylim: Tuple[float, float] = (-3, 3),
         axes: Optional[Tuple[Axes, Axes]] = None,
@@ -393,7 +393,7 @@ class Synthetic2DViz:
             n_samples (int): Number of samples to plot trajectories for.
                 Default is 20.
 
-            n_trajectory_points (int): Number of points in each trajectory
+            n_points (int): Number of points in each trajectory
                 (for ODE models). Default is 100.
 
             xlim (Tuple[float, float]): Limits in x direction.
@@ -441,7 +441,7 @@ class Synthetic2DViz:
             t_span = torch.linspace(
                 start=1.0,
                 end=0.0,
-                steps=n_trajectory_points,
+                steps=n_points,
                 device=device
             )
             x_t, _ = model(z, t_span, reverse=True)
@@ -1086,7 +1086,7 @@ class MNISTViz:
         cls,
         model: Union[NeuralODE, CNF, RealNVP],
         n_samples: int = 20,
-        n_trajectory_points: int = 100,
+        n_points: int = 100,
         axes: Optional[Tuple[Axes, Axes]] = None,
         save_path: Optional[str] = None,
         data_sample: Optional[torch.Tensor] = None
@@ -1103,7 +1103,7 @@ class MNISTViz:
             n_samples (int): Number of samples to plot trajectories for.
                 Default is 20.
 
-            n_trajectory_points (int): Number of points in each trajectory
+            n_points (int): Number of points in each trajectory
                 (for ODE models). Default is 100.
 
             axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
@@ -1144,7 +1144,7 @@ class MNISTViz:
             t_span = torch.linspace(
                 start=1.0,
                 end=0.0,
-                steps=n_trajectory_points,
+                steps=n_points,
                 device=device
             )
             x_t, _ = model(z, t_span, reverse=True)
