@@ -149,7 +149,7 @@ class CNF(nn.Module):
         state_final = state_t[-1]  # (batch, features + 1)
         z = state_final[:, :-1]  # (batch, features)
         log_det = state_final[:, -1]  # (batch,)
-        print(x.device, log_det_init.device, state_init.device, state_t.device, state_final.device, z.device, log_det.device)
+        print(device, t_span.device, x.device, log_det_init.device, state_init.device, state_t.device, state_final.device, z.device, log_det.device)
 
         return z, log_det
 
