@@ -105,9 +105,6 @@ class CNF(nn.Module):
                 - log_det (torch.Tensor): Log determinant with shape
                     (batch, 1).
         """
-        # Get device from model parameters (where computation happens)
-        device = next(self.vf.parameters()).device
-
         if t_span is None:
             if reverse:
                 # z -> x: integrate from t=1 to t=0
