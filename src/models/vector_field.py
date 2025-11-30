@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import spectral_norm
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 class VectorField(nn.Module):
     """Parametrizes dx/dt = f(x, t) using a neural network."""
@@ -32,21 +34,21 @@ class VectorField(nn.Module):
         dims = [features + time_embed_dim] + hidden_dims + [features]
         layers = []
         for i in range(len(dims) - 1):
-            linear = nn.Linear(dims[i], dims[i + 1])
+            linear = nn.Linear(dims[i], dims[i + 1]).to(device)
 
             if i < len(dims) - 1:  # No spectral norm on last layer
-                linear = spectral_norm(linear)
+                linear = spectral_norm(linear).to(device)
 
             layers.append(linear)
 
             if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.SiLU())
+                layers.append(nn.SiLU().to(device))
 
         self.net = nn.Sequential(*layers)
 
         # Initialization: last layer with small weights (σ=0.01)
-        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01)
-        nn.init.zeros_(self.net[-1].bias)
+        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01).to(device)
+        nn.init.zeros_(self.net[-1].bias).to(device)
 
     def time_embedding(self, t: torch.Tensor) -> torch.Tensor:
         """Sinusoidal time embedding.
@@ -105,6 +107,9 @@ class VectorField(nn.Module):
         if x.dim() == 1:
             x = x.unsqueeze(0)
 
+        x = x.to(device)
+        t = t.to(device)
+
         batch_size = x.shape[0]
 
         # Handle different t shapes from odeint
@@ -147,6 +152,7 @@ class VectorField(nn.Module):
 
         # Pass through the network
         dx_dt = self.net(x_t)
+        print(t.device, x.device, x_t.device, dx_dt.device)
 
         return dx_dt
 
