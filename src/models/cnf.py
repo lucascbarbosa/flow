@@ -44,10 +44,10 @@ class CNF(nn.Module):
         if base_dist is None:
             # Prior: N(0, I)
             print(device)
-            features = vector_field.features
+            features = vector_field.features.to(device)
             self.base_dist = torch.distributions.MultivariateNormal(
-                torch.zeros(features, device=device),
-                torch.eye(features, device=device)
+                torch.zeros(features),
+                torch.eye(features)
             )
         else:
             self.base_dist = base_dist
