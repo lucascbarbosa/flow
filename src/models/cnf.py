@@ -17,10 +17,10 @@ class CNF(nn.Module):
         self,
         vector_field: VectorField,
         method: Literal['dopri5', 'euler', 'rk4'] = 'dopri5',
-        rtol: float = 1e-3,
-        atol: float = 1e-4,
+        rtol: float = 1e-5,
+        atol: float = 1e-5,
         base_dist: Optional[Distribution] = None,
-        trace_scale: float = 1.0
+        trace_scale: float = 1e-2
     ) -> None:
         """Initialize CNF.
 
@@ -30,14 +30,14 @@ class CNF(nn.Module):
             method (Literal['dopri5', 'euler', 'rk4']): ODE solver method.
                 Default is 'dopri5'.
 
-            rtol (float): Relative tolerance for ODE solver. Default is 1e-3.
+            rtol (float): Relative tolerance for ODE solver. Default is 1e-5.
 
-            atol (float): Absolute tolerance for ODE solver. Default is 1e-4.
+            atol (float): Absolute tolerance for ODE solver. Default is 1e-5.
 
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).
 
-            trace_scale (float): Trace scale factor. Default is 1.0.
+            trace_scale (float): Trace scale factor. Default is 1e-2.
         """
         super().__init__()
         self.vf = vector_field
