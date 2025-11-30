@@ -42,7 +42,7 @@ class VectorField(nn.Module):
             layers.append(linear)
 
             if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.SiLU().to(device))
+                layers.append(nn.ReLU().to(device))
 
         self.net = nn.Sequential(*layers)
 
