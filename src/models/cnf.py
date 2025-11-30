@@ -43,6 +43,7 @@ class CNF(nn.Module):
         self.atol = atol
         if base_dist is None:
             # Prior: N(0, I)
+            print(device)
             features = vector_field.features
             self.base_dist = torch.distributions.MultivariateNormal(
                 torch.zeros(features, device=device),
