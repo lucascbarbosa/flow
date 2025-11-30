@@ -125,7 +125,7 @@ class Synthetic2DViz:
                 x_0_np[mask, 0],
                 x_0_np[mask, 1],
                 alpha=0.5,
-                s=10,
+                s=50,
                 color=label_to_color[label],
                 label=f'Class {label}'
             )
@@ -143,7 +143,7 @@ class Synthetic2DViz:
                 x_1_np[mask, 0],
                 x_1_np[mask, 1],
                 alpha=0.5,
-                s=10,
+                s=50,
                 color=label_to_color[label],
                 label=f'Class {label}'
             )
@@ -495,7 +495,7 @@ class Synthetic2DViz:
             x_final_np[:, 1],
             color='gray',
             alpha=0.5,
-            s=10
+            s=50
         )
 
         ax_right.set_xlabel(r'$x_1$')
@@ -593,7 +593,7 @@ class Synthetic2DViz:
             x_np[:, 1],
             color='gray',
             alpha=0.5,
-            s=10
+            s=50
         )
 
         ax_right.set_xlabel(r'$x_1$')
@@ -675,7 +675,7 @@ class Synthetic2DViz:
                     data[mask, 0],
                     data[mask, 1],
                     alpha=0.5,
-                    s=10,
+                    s=50,
                     color=colors[i],
                     label=f'Class {label}'
                 )
@@ -686,7 +686,7 @@ class Synthetic2DViz:
                 data[:, 0],
                 data[:, 1],
                 alpha=0.5,
-                s=10
+                s=50
             )
         ax.set_xlabel(r'$x_1$')
         ax.set_ylabel(r'$x_2$')
@@ -860,7 +860,7 @@ class MNISTViz:
                     x_0_np[mask, 0],
                     x_0_np[mask, 1],
                     alpha=0.5,
-                    s=10,
+                    s=50,
                     color=label_to_color[label],
                     label=f'Class {label}'
                 )
@@ -870,7 +870,7 @@ class MNISTViz:
                 x_0_np[:, 0],
                 x_0_np[:, 1],
                 alpha=0.5,
-                s=10,
+                s=50,
                 color='gray'
             )
 
@@ -888,7 +888,7 @@ class MNISTViz:
                     x_1_np[mask, 0],
                     x_1_np[mask, 1],
                     alpha=0.5,
-                    s=10,
+                    s=50,
                     color=label_to_color[label],
                     label=f'Class {label}'
                 )
@@ -898,7 +898,7 @@ class MNISTViz:
                 x_1_np[:, 0],
                 x_1_np[:, 1],
                 alpha=0.5,
-                s=10,
+                s=50,
                 color='gray'
             )
 
@@ -1193,7 +1193,7 @@ class MNISTViz:
             x_final_np[:, 1],
             color='gray',
             alpha=0.5,
-            s=10
+            s=50
         )
 
         ax_right.set_xlabel('PC1')
@@ -1295,7 +1295,7 @@ class MNISTViz:
             x_np[:, 1],
             color='gray',
             alpha=0.5,
-            s=10
+            s=50
         )
 
         ax_right.set_xlabel('PC1')

@@ -43,12 +43,10 @@ class CNF(nn.Module):
         self.atol = atol
         if base_dist is None:
             # Prior: N(0, I)
-            # Get device from vector_field parameters to ensure consistency
-            vf_device = next(vector_field.parameters()).device
             features = vector_field.features
             self.base_dist = torch.distributions.MultivariateNormal(
-                torch.zeros(features, device=vf_device),
-                torch.eye(features, device=vf_device)
+                torch.zeros(features, device=device),
+                torch.eye(features, device=device)
             )
         else:
             self.base_dist = base_dist
@@ -168,16 +166,6 @@ class CNF(nn.Module):
 
         # Transform x -> z
         z, log_det = self.forward(x, reverse=False)
-
-        # Ensure base_dist is on the same device as z
-        device = z.device
-        if self.base_dist.loc.device != device:
-            # Recreate base_dist on the correct device
-            features = z.shape[-1]
-            self.base_dist = torch.distributions.MultivariateNormal(
-                torch.zeros(features, device=device),
-                torch.eye(features, device=device)
-            )
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
