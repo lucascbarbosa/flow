@@ -6,7 +6,7 @@ from torch import autograd
 
 def divergence_exact(
     f: Callable[[torch.Tensor], torch.Tensor],
-    x: torch.Tensor
+    x: torch.Tensor,
 ) -> torch.Tensor:
     """Calculate trace(∂f/∂x) exactly using autograd.
 
@@ -120,7 +120,6 @@ def divergence_hutchinson(
     if not x.requires_grad:
         x = x.clone().requires_grad_(True)
     else:
-        # If x already requires grad, ensure it's enabled (in case it was disabled)
         x = x.requires_grad_(True)
 
     # Compute f(x)

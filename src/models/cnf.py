@@ -19,7 +19,8 @@ class CNF(nn.Module):
         method: Literal['dopri5', 'euler', 'rk4'] = 'dopri5',
         rtol: float = 1e-3,
         atol: float = 1e-4,
-        base_dist: Optional[Distribution] = None
+        base_dist: Optional[Distribution] = None,
+        trace_scale: float = 1.0
     ) -> None:
         """Initialize CNF.
 
@@ -35,12 +36,15 @@ class CNF(nn.Module):
 
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).
+
+            trace_scale (float): Trace scale factor. Default is 1.0.
         """
         super().__init__()
         self.vf = vector_field
         self.method = method
         self.rtol = rtol
         self.atol = atol
+        self.trace_scale = trace_scale
         if base_dist is None:
             # Prior: N(0, I)
             features = vector_field.features
@@ -79,8 +83,15 @@ class CNF(nn.Module):
 
         # Compute trace of the Jacobian using exact method
         with torch.enable_grad():
-            trace = divergence_exact(lambda x_: self.vf(t, x_), x)
+            trace = divergence_exact(
+                lambda x_: self.vf(t, x_),
+                x,
+            )
 
+        # Apply scale factor
+        trace = trace * self.trace_scale
+
+        # Compute log determinant derivative
         dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
 
         return torch.cat([dx_dt, dlogdet_dt], dim=-1)
