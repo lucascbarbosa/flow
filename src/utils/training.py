@@ -1,6 +1,7 @@
 """Training utilities."""
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score
 from src.models.cnf import CNF
 from src.models.neural_ode import NeuralODE
 from src.models.ffjord import FFJORD
@@ -39,8 +40,8 @@ def train_neural_ode(
     for epoch in range(num_epochs):
         total_loss = 0.0
         n_batches = 0
-        correct = 0
-        total_samples = 0
+        all_predictions = []
+        all_labels = []
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
             x_data, labels = batch
@@ -62,19 +63,19 @@ def train_neural_ode(
             loss.backward()
             optimizer.step()
 
-            # Calculate accuracy
+            # Collect predictions and labels for F1-score
             _, predicted = torch.max(logits.data, 1)
-            total_samples += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            all_predictions.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
 
             total_loss += loss.item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-        accuracy = 100 * correct / total_samples
+        f1 = f1_score(all_labels, all_predictions, average='macro')
         print(
             f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}, "
-            f"Accuracy: {accuracy:.2f}%"
+            f"F1-score: {f1:.4f}"
         )
 
     return avg_loss
