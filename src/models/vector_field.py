@@ -152,7 +152,6 @@ class VectorField(nn.Module):
 
         # Pass through the network
         dx_dt = self.net(x_t)
-        print(t.device, x.device, x_t.device, dx_dt.device)
 
         return dx_dt
 
