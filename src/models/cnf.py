@@ -48,7 +48,6 @@ class CNF(nn.Module):
                 torch.zeros(features, device=device),
                 torch.eye(features, device=device)
             )
-            print(self.base_dist.loc.device)
         else:
             self.base_dist = base_dist
 
@@ -150,6 +149,7 @@ class CNF(nn.Module):
         state_final = state_t[-1]  # (batch, features + 1)
         z = state_final[:, :-1]  # (batch, features)
         log_det = state_final[:, -1]  # (batch,)
+        print(x.device, log_det_init.device, state_init.device, state_t.device, state_final.device, z.device, log_det.device)
 
         return z, log_det
 
