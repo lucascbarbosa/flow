@@ -56,7 +56,7 @@ def compare_solvers():
             dataloader,
             optimizer,
             device,
-            num_epochs=50
+            n_epochs=50
         )
 
         # Contar NFEs (usando amostras de N(0, I))

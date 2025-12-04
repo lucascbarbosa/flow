@@ -37,12 +37,11 @@ class VectorField(nn.Module):
                 nn.Linear(
                     dims[i],
                     dims[i + 1],
-                    dtype=torch.float64,
-                    device=device
+                    dtype=torch.float64
                 )
             )
             if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.ReLU())
+                layers.append(nn.Tanh())
 
         self.net = nn.Sequential(*layers)
 
@@ -61,29 +60,27 @@ class VectorField(nn.Module):
             embedded (torch.Tensor): Embedded time tensor with shape
                 [batch, time_embed_dim].
         """
+        # Handle scalar
         if t.dim() == 0:
             t = t.unsqueeze(0)
 
+        # Handle 2D tensor with shape [batch, 1]
+        elif t.dim() == 2 and t.shape[1] == 1:
+            t = t[:, 0]
+
+        # Ensure 1D tensor
         elif t.dim() != 1:
             raise ValueError(
                 f"Time tensor must have shape [batch, ], got {t.shape}"
             )
 
-        elif t.dim() == 2 and t.shape[1] == 1:
-            t = t[:, 0]
-
         # t_emb[2i] = sin(t / 10000^(2i/d))
         # t_emb[2i+1] = cos(t / 10000^(2i/d))
         half = self.time_embed_dim // 2
-        freqs = torch.exp(
-            - torch.arange(
-                0, half,
-                dtype=torch.float64,
-                device=device
-            )
-            * math.log(10000.0) /
-            (half - 1)
-        )
+        # Standard positional encoding: 10000^(2i/d_model)
+        # For i in [0, half-1], compute 10000^(-2i/d_model)
+        i = torch.arange(0, half, dtype=torch.float64, device=t.device)
+        freqs = torch.exp(-i * 2.0 * math.log(10000.0) / self.time_embed_dim)
         return torch.cat([
             torch.sin(t.unsqueeze(-1) * freqs),
             torch.cos(t.unsqueeze(-1) * freqs)

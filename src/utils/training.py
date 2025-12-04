@@ -9,6 +9,9 @@ from tqdm import tqdm
 from zuko.flows import RealNVP
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 def mdd_loss(
     x: torch.Tensor,
     y: torch.Tensor,
@@ -70,30 +73,18 @@ def train_neural_ode(
     model: NeuralODE,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    num_epochs: int = 100,
+    n_epochs: int = 100,
     n_steps: int = 100,
     mmd_sigma: float = 1.0
 ) -> None:
-    """Train Neural ODE using Maximum Mean Discrepancy (MDD) loss.
-
-    Args:
-        model (NeuralODE): Neural ODE model.
-        dataloader (DataLoader): DataLoader for training data.
-        optimizer (Optimizer): Optimizer for training.
-        device (Device): Device to run training on.
-        num_epochs (int): Number of training epochs.
-        n_steps (int): Number of steps to integrate the ODE.
-        mmd_sigma (float): Bandwidth parameter for RBF kernel in MDD.
-            Default is 1.0.
-    """
+    """Train Neural ODE using Maximum Mean Discrepancy (MDD) loss."""
     model.train()
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         total_loss = 0.0
         n_batches = 0
 
-        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
             optimizer.zero_grad()
             x0 = x0.to(device)
 
@@ -105,7 +96,7 @@ def train_neural_ode(
             z_target = torch.randn_like(z)
 
             # Loss: Maximum Mean Discrepancy (MDD)
-            loss = mdd_loss(z, z_target, kernel='rbf', sigma=mmd_sigma)
+            loss = mdd_loss(z, z_target, sigma=mmd_sigma)
 
             loss.backward()
             optimizer.step()
@@ -123,26 +114,16 @@ def train_cnf(
     model: CNF,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    num_epochs: int = 100,
+    n_epochs: int = 100,
 ) -> None:
-    """Train CNF using negative log-likelihood.
-
-    Args:
-        model (CNF): CNF model.
-        dataloader (DataLoader): DataLoader for training data.
-        optimizer (Optimizer): Optimizer for training.
-        device (Device): Device to run training on.
-        num_epochs (int): Number of training epochs.
-        n_steps (int): Number of steps to integrate the ODE.
-    """
+    """Train CNF using negative log-likelihood."""
     model.train()
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         total_loss = 0.0
         n_batches = 0
 
-        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
             optimizer.zero_grad()
             x0 = x0.to(device)
 
@@ -171,7 +152,7 @@ def train_realnvp(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    num_epochs: int = 100
+    n_epochs: int = 100
 ) -> None:
     """Train RealNVP flow using negative log-likelihood.
 
@@ -180,16 +161,16 @@ def train_realnvp(
         dataloader (DataLoader): DataLoader for training data.
         optimizer (Optimizer): Optimizer for training.
         device (Device): Device to run training on.
-        num_epochs (int): Number of training epochs.
+        n_epochs (int): Number of training epochs.
     """
     flow.train()
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         total_loss = 0.0
         n_batches = 0
 
         for batch in tqdm(
-            dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"
+            dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"
         ):
             # Extract data from batch (handle both single-tensor and tuple)
             if isinstance(batch, (list, tuple)):
@@ -225,7 +206,7 @@ def train_ffjord(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    num_epochs: int = 100,
+    n_epochs: int = 100,
     lambda_ke: float = 0.01,
     warmup_epochs: int = 5
 ) -> None:
@@ -236,7 +217,7 @@ def train_ffjord(
         dataloader (DataLoader): DataLoader for training data.
         optimizer (Optimizer): Optimizer for training.
         device (Device): Device to run training on.
-        num_epochs (int): Number of training epochs.
+        n_epochs (int): Number of training epochs.
         lambda_ke (float): Weight for kinetic energy regularization.
             Default is 0.01.
         warmup_epochs (int): Number of epochs for linear learning rate warmup.
@@ -245,7 +226,7 @@ def train_ffjord(
     model.train()
     initial_lr = optimizer.param_groups[0]['lr']
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         # Linear warmup for learning rate
         if epoch < warmup_epochs:
             lr = initial_lr * (epoch + 1) / warmup_epochs
@@ -257,7 +238,7 @@ def train_ffjord(
         total_ke = 0.0
         n_batches = 0
 
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
             x = batch[0].to(device)
 
             optimizer.zero_grad()

@@ -45,7 +45,7 @@ def train_cnf_with_regularization(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    num_epochs: int = 100,
+    n_epochs: int = 100,
     lambda_ke: float = 0.0,
     lambda_jf: float = 0.0,
     reg_time: float = 0.5
@@ -57,7 +57,7 @@ def train_cnf_with_regularization(
         dataloader: DataLoader for training data.
         optimizer: Optimizer for training.
         device: Device to run training on.
-        num_epochs: Number of training epochs.
+        n_epochs: Number of training epochs.
         lambda_ke: Weight for kinetic energy regularization.
         lambda_jf: Weight for Jacobian Frobenius regularization.
         reg_time: Time point at which to compute regularizations.
@@ -74,7 +74,7 @@ def train_cnf_with_regularization(
         'jf': []
     }
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         total_loss = 0.0
         total_nll = 0.0
         total_ke = 0.0
@@ -82,7 +82,7 @@ def train_cnf_with_regularization(
         n_batches = 0
 
         for x0 in tqdm(
-            dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"
+            dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"
         ):
             optimizer.zero_grad()
             x0 = x0.to(device)
@@ -161,8 +161,8 @@ def compare_regularizations():
         vf = VectorField(
             features=2, hidden_dims=[64, 64], time_embed_dim=16
         )
-        model = CNF(vf, rtol=1e-3, atol=1e-4).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+        model = CNF(vf).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
         # Treinar com regularização
         history = train_cnf_with_regularization(
@@ -170,7 +170,7 @@ def compare_regularizations():
             dataloader,
             optimizer,
             device,
-            num_epochs=50,
+            n_epochs=50,
             lambda_ke=lambda_ke,
             lambda_jf=lambda_jf
         )

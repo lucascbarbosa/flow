@@ -33,7 +33,7 @@ def compare_architectures():
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
         # Treinar
-        train_neural_ode(model, dataloader, optimizer, device, num_epochs=10)
+        train_neural_ode(model, dataloader, optimizer, device, n_epochs=10)
 
         results[name] = {
             'model': model

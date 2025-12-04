@@ -16,8 +16,6 @@ class CNF(nn.Module):
     def __init__(
         self,
         vector_field: VectorField,
-        rtol: float = 1e-5,
-        atol: float = 1e-5,
         base_dist: Optional[Distribution] = None,
         trace_scale: float = 1e-2
     ) -> None:
@@ -26,10 +24,6 @@ class CNF(nn.Module):
         Args:
             vector_field (VectorField): Vector field module f(x, t).
 
-            rtol (float): Relative tolerance for ODE solver. Default is 1e-5.
-
-            atol (float): Absolute tolerance for ODE solver. Default is 1e-5.
-
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).
 
@@ -37,8 +31,6 @@ class CNF(nn.Module):
         """
         super().__init__()
         self.vf = vector_field
-        self.rtol = rtol
-        self.atol = atol
         self.trace_scale = trace_scale
         if base_dist is None:
             # Prior: N(0, I)
@@ -95,9 +87,6 @@ class CNF(nn.Module):
             dtype=torch.float64,
         )
 
-        if not x.requires_grad and torch.is_grad_enabled():
-            x = x.clone().requires_grad_(True)
-
         log_det_init = torch.zeros(
             x.shape[0], 1,
             device=device,
@@ -111,8 +100,8 @@ class CNF(nn.Module):
             state_init,
             t_span,
             method='dopri5',
-            rtol=self.rtol,
-            atol=self.atol,
+            rtol=1e-3,
+            atol=1e-4,
             adjoint_params=tuple(self.vf.parameters())
         )[-1]
 
@@ -162,8 +151,8 @@ class CNF(nn.Module):
             z,
             t_span,
             method='dopri5',
-            rtol=self.rtol,
-            atol=self.atol,
+            rtol=1e-3,
+            atol=1e-4,
             adjoint_params=tuple(self.vf.parameters())
         )
         return x_t[-1]
