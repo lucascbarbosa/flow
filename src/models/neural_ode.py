@@ -49,6 +49,28 @@ class NeuralODE(nn.Module):
         )
         return x_t
 
+    def backward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 100,
+    ) -> torch.Tensor:
+        """Integrate ODE from t=1 to t=0."""
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+        x_t = odeint(
+            self.vf,
+            x,
+            t_span,
+            method=self.solver,
+            rtol=self.rtol,
+            atol=self.atol
+        )
+        return x_t
+
     def sample(
         self,
         n_samples: int = 100,
@@ -63,21 +85,5 @@ class NeuralODE(nn.Module):
             dtype=torch.float64,
         )
 
-        # t_span from t=1 to t=0
-        t_span = torch.linspace(
-            1., 0.,
-            n_steps,
-            device=device,
-            dtype=torch.float64,
-        )
-
-        # Integrate ODE from t=1 to t=0
-        x_t = odeint(
-            self.vf,
-            z,
-            t_span,
-            method=self.solver,
-            rtol=self.rtol,
-            atol=self.atol
-        )
+        x_t = self.backward(z, n_steps)
         return x_t[-1]  # Return final state

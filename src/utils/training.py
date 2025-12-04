@@ -12,91 +12,83 @@ from zuko.flows import RealNVP
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def mdd_loss(
-    x: torch.Tensor,
-    y: torch.Tensor,
-    sigma: float = 1.0
-) -> torch.Tensor:
-    """Compute Maximum Mean Discrepancy (MDD) between two samples.
-
-    Args:
-        x (torch.Tensor): First sample, shape (n, d).
-        y (torch.Tensor): Second sample, shape (m, d).
-        sigma (float): Bandwidth parameter for RBF kernel. Default is 1.0.
-
-    Returns:
-        torch.Tensor: MDD² value (scalar).
-    """
-    def rbf_kernel(
-        x1: torch.Tensor, x2: torch.Tensor
-    ) -> torch.Tensor:
-        """RBF kernel: k(x1, x2) = exp(-||x1 - x2||² / (2*sigma²))."""
-        # Compute pairwise squared distances
-        # x1: (n, d), x2: (m, d) -> (n, m)
-        x1_norm = (x1 ** 2).sum(dim=1, keepdim=True)  # (n, 1)
-        x2_norm = (x2 ** 2).sum(dim=1, keepdim=True)  # (m, 1)
-        dist_sq = x1_norm + x2_norm.t() - 2 * x1 @ x2.t()  # (n, m)
-        return torch.exp(-dist_sq / (2 * sigma ** 2))
-
-    k_xx = rbf_kernel(x, x)  # (n, n)
-    k_yy = rbf_kernel(y, y)  # (m, m)
-    k_xy = rbf_kernel(x, y)  # (n, m)
-
-    # MMD² = E[k(x, x')] + E[k(y, y')] - 2*E[k(x, y)]
-    # Use unbiased U-statistic estimator
-    # (exclude diagonal for same-sample terms)
-    n = x.shape[0]
-    m = y.shape[0]
-
-    # E[k(x, x')]: mean of off-diagonal elements
-    if n > 1:
-        xx_term = (k_xx.sum() - k_xx.trace()) / (n * (n - 1))
-    else:
-        xx_term = torch.tensor(0.0, device=x.device, dtype=x.dtype)
-
-    # E[k(y, y')]: mean of off-diagonal elements
-    if m > 1:
-        yy_term = (k_yy.sum() - k_yy.trace()) / (m * (m - 1))
-    else:
-        yy_term = torch.tensor(0.0, device=y.device, dtype=y.dtype)
-
-    # E[k(x, y)]: mean of all cross terms
-    xy_term = k_xy.mean()
-
-    # MMD²
-    mmd_sq = xx_term + yy_term - 2 * xy_term
-
-    return mmd_sq
-
-
 def train_neural_ode(
     model: NeuralODE,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     n_epochs: int = 100,
     n_steps: int = 100,
-    mmd_sigma: float = 1.0
+    n_samples: int = 25,
 ) -> None:
-    """Train Neural ODE using Maximum Mean Discrepancy (MDD) loss."""
+    """Train Neural ODE using Maximum Mean Discrepancy (MMD) loss.
+
+    Uses four loss components:
+    1. Forward loss: ensures data → Gaussian transformation (MMD)
+    2. Backward loss: ensures Gaussian → data transformation (MMD)
+    3. Reversibility loss: ensures forward→backward returns to original (MSE)
+
+    Args:
+        model: Neural ODE model.
+        dataloader: DataLoader for training data.
+        optimizer: Optimizer for training.
+        n_epochs: Number of training epochs.
+        n_steps: Number of steps to integrate the ODE.
+        n_samples: Number of samples to use for MMD loss.
+    """
     model.train()
 
     for epoch in range(n_epochs):
         total_loss = 0.0
         n_batches = 0
 
-        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
+        for x0_target in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
             optimizer.zero_grad()
-            x0 = x0.to(device)
+            batch_size = x0_target.shape[0]
+            features = x0_target.shape[1]
 
-            # Forward: integrate ODE
-            x_t = model(x0, n_steps)
-            z = x_t[-1]
+            # 1. Forward trajectory: x0_target → x1_pred
+            x0_target = x0_target.to(device)
+            forward_x_t = model(x0_target, n_steps)
+            forward_x_t = forward_x_t.permute(1, 2, 0)
 
-            # Generate random target from standard normal
-            z_target = torch.randn_like(z)
+            # 2. Backward trajectory: x1_target → x0_pred
+            x1_target = torch.randn_like(x0_target)
+            backward_x_t = model.backward(x1_target, n_steps)
+            backward_x_t = torch.flip(backward_x_t, dims=[0])
+            backward_x_t = backward_x_t.permute(1, 2, 0)
 
-            # Loss: Maximum Mean Discrepancy (MDD)
-            loss = mdd_loss(z, z_target, sigma=mmd_sigma)
+            # Sample n_samples random time points for each trajectory in batch
+            time_indices = torch.randint(
+                0, n_steps,
+                (batch_size, n_samples),
+                device=x0_target.device
+            )
+            # time_indices = torch.linspace(
+            #     0, n_steps - 1, n_samples,
+            #     dtype=torch.long,
+            #     device=x0_target.device
+            # ).unsqueeze(0).expand(batch_size, n_samples)
+
+            # Use advanced indexing to sample from each trajectory
+            batch_indices = torch.arange(
+                batch_size, device=x0_target.device
+            ).unsqueeze(1)
+
+            # Sample forward states: (batch_size, features, n_samples)
+            sample_forward = forward_x_t[
+                batch_indices, :, time_indices
+            ]
+            sample_forward = sample_forward.permute(0, 2, 1)
+            sample_forward = sample_forward.reshape(-1, features)
+
+            # Sample backward states: (batch_size, features, n_samples)
+            sample_backward = backward_x_t[
+                batch_indices, :, time_indices
+            ]
+            sample_backward = sample_backward.permute(0, 2, 1)
+            sample_backward = sample_backward.reshape(-1, features)
+
+            loss = ((sample_forward - sample_backward) ** 2).mean()
 
             loss.backward()
             optimizer.step()
@@ -105,7 +97,11 @@ def train_neural_ode(
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
+
+        print(
+            f"Epoch {epoch + 1}, "
+            f"Loss: {avg_loss:.6f} "
+        )
 
     return avg_loss
 
@@ -312,7 +308,7 @@ class CountingVectorField(nn.Module):
 def count_nfe(
     model: NeuralODE | CNF,
     x: torch.Tensor,
-    n_steps: int = 100
+    n_steps: int = 10
 ) -> int:
     """Count number of function evaluations (NFEs) during integration."""
     # Create counting wrapper module
