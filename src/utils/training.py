@@ -1,13 +1,11 @@
 """Training utilities."""
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score
 from src.models.cnf import CNF
 from src.models.neural_ode import NeuralODE
 from src.models.ffjord import FFJORD
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from typing import Optional
 from zuko.flows import RealNVP
 
 
@@ -26,16 +24,6 @@ def train_neural_ode(
     for epoch in range(num_epochs):
         total_loss = 0.0
         n_batches = 0
-<<<<<<< HEAD
-=======
-        all_predictions = []
-        all_labels = []
-
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            x_data, labels = batch
-            x_data = x_data.to(device)
-            labels = labels.to(device)
->>>>>>> 3bee5615e3ed80671596e6a60fbca4371b31f6dd
 
         for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
             optimizer.zero_grad()
@@ -54,27 +42,11 @@ def train_neural_ode(
             loss.backward()
             optimizer.step()
 
-<<<<<<< HEAD
-=======
-            # Collect predictions and labels for F1-score
-            _, predicted = torch.max(logits.data, 1)
-            all_predictions.extend(predicted.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-
->>>>>>> 3bee5615e3ed80671596e6a60fbca4371b31f6dd
             total_loss += loss.item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-<<<<<<< HEAD
         print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
-=======
-        f1 = f1_score(all_labels, all_predictions, average='macro')
-        print(
-            f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}, "
-            f"F1-score: {f1:.4f}"
-        )
->>>>>>> 3bee5615e3ed80671596e6a60fbca4371b31f6dd
 
     return avg_loss
 

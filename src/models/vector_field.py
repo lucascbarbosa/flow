@@ -82,7 +82,7 @@ class VectorField(nn.Module):
             torch.cos(t.unsqueeze(-1) * freqs)
         ], dim=-1)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """Computes f(x, t) = dx/dt."""
         t = t.to(device)
 
