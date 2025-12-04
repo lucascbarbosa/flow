@@ -8,6 +8,9 @@ from torch.distributions import Distribution
 from typing import Literal, Optional, Tuple
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class CNF(nn.Module):
     """Continuous Normalizing Flow with exact trace computation."""
     def __init__(
@@ -109,38 +112,15 @@ class CNF(nn.Module):
         self,
         x: torch.Tensor,
         t_span: torch.Tensor | None = None,
-        reverse: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Transform x -> z (forward) or z -> x (reverse).
-
-        Args:
-            x (torch.Tensor): Input tensor with shape (batch, features).
-            t_span (torch.Tensor): Time points to evaluate.
-            reverse (bool): If True, integrates from t=1 to t=0 (z -> x).
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Tuple containing:
-                - z (torch.Tensor): Transformed tensor with shape
-                    (batch, features).
-                - log_det (torch.Tensor): Log determinant with shape
-                    (batch, 1).
-        """
+        """Transform x -> z (forward) or z -> x (reverse)."""
         if t_span is None:
-            if reverse:
-                # z -> x: integrate from t=1 to t=0
-                t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
-            else:
-                # x -> z: integrate from t=0 to t=1
-                t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
+            t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
         else:
             t_span = t_span.to(x.device)
 
         if not x.requires_grad and torch.is_grad_enabled():
             x = x.clone().requires_grad_(True)
-
-        # Ensure x is 2D: [batch, features]
-        if x.dim() == 1:
-            x = x.unsqueeze(0)
 
         log_det_init = torch.zeros(
             x.shape[0], 1,
@@ -149,7 +129,7 @@ class CNF(nn.Module):
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
-        # Regular odeint handles both input and parameter gradients
+        # Integrate ODE forward
         state_t = odeint(
             self._augmented_dynamics,
             state_init,
@@ -166,47 +146,43 @@ class CNF(nn.Module):
 
         return z, log_det
 
-    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
-        """Calculate log p(x) using change of variables.
-
-        Args:
-            x (torch.Tensor): Input tensor with shape (batch, features).
-
-        Returns:
-            torch.Tensor: Log probability with shape (batch,).
-        """
+    def log_prob(
+        self,
+        x: torch.Tensor,
+        t_span: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Calculate log p(x) using change of variables."""
         # Ensure x requires grad for odeint_adjoint to work properly
         if not x.requires_grad:
             x = x.clone().requires_grad_(True)
 
         # Transform x -> z
-        z, log_det = self.forward(x, reverse=False)
+        z, log_det = self.forward(x, t_span)
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
         base_dist = self._get_base_dist(z.device)
         log_prob_z = base_dist.log_prob(z)
         log_prob_x = log_prob_z + log_det
-
         return log_prob_x
 
-    def sample(self, num_samples: int) -> torch.Tensor:
-        """Generate samples x ~ p(x) via z ~ p(z) -> x.
-
-        Args:
-            num_samples (int): Number of samples.
-
-        Returns:
-            torch.Tensor: Samples with shape (num_samples, features).
-        """
-        # Get device from model parameters
-        device = next(self.vf.parameters()).device
+    def sample(
+        self,
+        num_samples: int,
+        n_steps: int = 100,
+    ) -> torch.Tensor:
+        """Generate samples x ~ p(x) via z ~ p(z) -> x."""
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
 
         # Sample z ~ p(z)
         base_dist = self._get_base_dist(device)
-        z = base_dist.sample((num_samples,))
+        z = base_dist.sample((num_samples,)).to(device)
 
         # Transform z -> x
-        x, _ = self.forward(z, reverse=True)
-
+        x, _ = self.forward(z, t_span)
         return x

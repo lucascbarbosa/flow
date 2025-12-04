@@ -1,11 +1,4 @@
 """Experimento 1: Comparação de solvers ODE."""
-import sys
-from pathlib import Path
-
-# Add project root to Python path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
 import torch
 import torch.optim as optim
 from src.models.neural_ode import NeuralODE

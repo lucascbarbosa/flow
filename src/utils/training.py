@@ -13,67 +13,39 @@ def train_neural_ode(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    num_epochs: int = 100
+    num_epochs: int = 100,
+    n_steps: int = 100
 ) -> None:
-    """Train Neural ODE for classification task.
-
-    The model integrates the ODE and classifies the final state.
-    Returns both trajectory and logits, but only uses logits for training.
-
-    Args:
-        model (NeuralODE): NeuralODE model with classification head.
-
-        dataloader (DataLoader): DataLoader for training data.
-
-        optimizer (Optimizer): Optimizer for training.
-
-        device (Device): Device to run training on.
-
-        num_epochs (int): Number of training epochs.
-    """
+    """Train Neural ODE for classification task."""
     model.train()
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.MSELoss()
 
     for epoch in range(num_epochs):
         total_loss = 0.0
         n_batches = 0
-        correct = 0
-        total_samples = 0
 
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            x_data, labels = batch
-            x_data = x_data.to(device)
-            labels = labels.to(device)
-
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
             optimizer.zero_grad()
+            x0 = x0.to(device)
 
-            # Use data as initial condition
-            z = x_data
+            # Forward: integrate ODE
+            x_t = model(x0, n_steps)
+            z = x_t[-1]
 
-            # Forward: integrate ODE and classify
-            # Returns trajectory and logits (trajectory kept for visualization)
-            _, logits = model(z)
+            # Generate random target
+            z_target = torch.randn_like(z)
 
-            # Loss: Cross-entropy
-            loss = criterion(logits, labels)
+            # Loss: Mean Squared Error
+            loss = criterion(z, z_target)
 
             loss.backward()
             optimizer.step()
-
-            # Calculate accuracy
-            _, predicted = torch.max(logits.data, 1)
-            total_samples += labels.size(0)
-            correct += (predicted == labels).sum().item()
 
             total_loss += loss.item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
-        accuracy = 100 * correct / total_samples
-        print(
-            f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}, "
-            f"Accuracy: {accuracy:.2f}%"
-        )
+        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
 
     return avg_loss
 
@@ -83,7 +55,8 @@ def train_cnf(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    num_epochs: int = 100
+    num_epochs: int = 100,
+    n_steps: int = 100
 ) -> None:
     """Train CNF using negative log-likelihood.
 
@@ -93,6 +66,7 @@ def train_cnf(
         optimizer (Optimizer): Optimizer for training.
         device (Device): Device to run training on.
         num_epochs (int): Number of training epochs.
+        n_steps (int): Number of steps to integrate the ODE.
     """
     model.train()
 
@@ -100,12 +74,12 @@ def train_cnf(
         total_loss = 0.0
         n_batches = 0
 
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            x = batch[0].to(device)
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
             optimizer.zero_grad()
+            x0 = x0.to(device)
 
             # Calculate log-likelihood
-            log_prob = model.log_prob(x)
+            log_prob = model.log_prob(x0)
 
             # Loss: negative log-likelihood
             loss = -log_prob.mean()
@@ -186,18 +160,9 @@ class CountingVectorField(nn.Module):
 def count_nfe(
     model: NeuralODE | CNF,
     x: torch.Tensor,
-    t_span: Optional[torch.Tensor] = None
+    n_steps: int = 100
 ) -> int:
-    """Count number of function evaluations (NFEs) during integration.
-
-    Args:
-        model (NeuralODE | CNF): NeuralODE or CNF model with vf attribute.
-        x (torch.Tensor): Input tensor.
-        t_span (torch.Tensor): Time points for integration.
-
-    Returns:
-        int: Number of function evaluations.
-    """
+    """Count number of function evaluations (NFEs) during integration."""
     # Create counting wrapper module
     counting_vf = CountingVectorField(model.vf)
 
@@ -207,7 +172,7 @@ def count_nfe(
 
     # Forward pass
     with torch.no_grad():
-        _, _ = model(x, t_span, reverse=False)
+        model(x, n_steps)
 
     # Get count
     nfe_count = counting_vf.nfe
