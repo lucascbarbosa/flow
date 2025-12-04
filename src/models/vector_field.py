@@ -33,15 +33,22 @@ class VectorField(nn.Module):
         dims = [features + time_embed_dim] + hidden_dims + [features]
         layers = []
         for i in range(len(dims) - 1):
-            layers.append(nn.Linear(dims[i], dims[i + 1]).to(device))
+            layers.append(
+                nn.Linear(
+                    dims[i],
+                    dims[i + 1],
+                    dtype=torch.float64,
+                    device=device
+                )
+            )
             if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.SiLU().to(device))
+                layers.append(nn.ReLU())
 
         self.net = nn.Sequential(*layers)
 
         # Initialization: last layer with small weights (σ=0.01)
-        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01).to(device)
-        nn.init.zeros_(self.net[-1].bias).to(device)
+        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.net[-1].bias)
 
     def time_embedding(self, t: torch.Tensor) -> torch.Tensor:
         """Sinusoidal time embedding.
@@ -71,7 +78,7 @@ class VectorField(nn.Module):
         freqs = torch.exp(
             - torch.arange(
                 0, half,
-                dtype=torch.float32,
+                dtype=torch.float64,
                 device=device
             )
             * math.log(10000.0) /

@@ -46,7 +46,7 @@ def compare_solvers():
             solver=method,
             rtol=rtol,
             atol=atol,
-            num_classes=2
+            n_outputs=2
         ).to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 

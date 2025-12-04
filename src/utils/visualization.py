@@ -13,16 +13,18 @@ from zuko.flows import RealNVP
 from sklearn.decomposition import PCA
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class Synthetic2DViz:
     """Visualization class for 2D synthetic datasets."""
     @classmethod
     def plot_trajectories(
         cls,
-        model: Union[NeuralODE, CNF, VectorField],
+        model: Union[NeuralODE, CNF, RealNVP],
         dataset,
         n_samples: int = 20,
-        t_span: Optional[torch.Tensor] = None,
-        n_points: int = 100,
+        n_steps: int = 100,
         axes: Optional[Tuple[Axes, Axes]] = None,
         save_path: Optional[str] = None
     ) -> Tuple[Axes, Axes]:
@@ -34,18 +36,15 @@ class Synthetic2DViz:
         - Right: Final state x(1) with label colors
 
         Args:
-            model (Union[NeuralODE, CNF, VectorField]): Model. NeuralODE or CNF
-                for trajectory integration, or VectorField (will create
-                NeuralODE wrapper).
+            model (Union[NeuralODE, CNF, RealNVP]): Model. NeuralODE, CNF or
+                RealNVP for trajectory integration.
 
             dataset: Dataset with .data and .labels attributes.
 
             n_samples (int): Number of random samples to plot.
                 Default is 20.
 
-            t_span (torch.Tensor): Time points for integration.
-
-            n_points (int): Number of points in trajectory.
+            n_steps (int): Number of time steps. Default is 100.
 
             axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
                 left and right plots. If None, creates new figure.
@@ -64,71 +63,29 @@ class Synthetic2DViz:
             ax_left, ax_right = axes
 
         data = dataset.data
-        labels = dataset.labels
 
         # Sample random subset
         n_total = data.shape[0]
         n_plot = min(n_samples, n_total)
         indices = torch.randperm(n_total)[:n_plot]
 
-        # Get device and determine model type once
-        if isinstance(model, VectorField):
-            raise ValueError(
-                "plot_trajectories requires NeuralODE or CNF model. "
-                "VectorField alone cannot integrate trajectories."
-            )
-        # At this point, model is NeuralODE or CNF
-        device = next(model.vf.parameters()).device
-        is_neural_ode = isinstance(model, NeuralODE)
-
         x_0 = data[indices].to(device)
-        sampled_labels = labels[indices]
-
-        if t_span is None:
-            t_span = torch.linspace(0, 1, n_points).to(device)
 
         # Integrate ODE from x(0) to x(1)
         model.eval()
-        with torch.no_grad():
-            if is_neural_ode:
-                x_t, _ = model(x_0, t_span)
-            else:
-                # CNF forward goes from x to z, so we reverse
-                x_t, _ = model(x_0, t_span, reverse=False)
+        x_t = model(x_0, n_steps)
 
-        # Get final state x(1)
-        if x_t.dim() == 3:
-            x_1 = x_t[-1]  # (n_plot, features)
-        elif x_t.dim() == 2:
-            x_1 = x_t  # Already final state
-        else:
-            raise ValueError(f"Unexpected x_t shape: {x_t.shape}")
-
-        x_0_np = x_0.cpu().numpy()
-        x_1_np = x_1.cpu().numpy()
-        labels_np = labels.cpu().numpy()
-        sampled_labels_np = sampled_labels.cpu().numpy()
-
-        # Get unique labels and assign colors
-        unique_labels = np.unique(labels_np)
-        colors = plt.cm.get_cmap('tab10')(
-            np.linspace(0, 1, len(unique_labels))
-        )
-        label_to_color = {
-            label: colors[i] for i, label in enumerate(unique_labels)
-        }
+        x_1 = x_t[-1]
+        x_0_np = x_0.detach().cpu().numpy()
+        x_1_np = x_1.detach().cpu().numpy()
 
         # LEFT PLOT: Only sampled x(0) points with label colors
-        for i, label in enumerate(unique_labels):
-            mask = sampled_labels_np == label
-            ax_left.scatter(
-                x_0_np[mask, 0],
-                x_0_np[mask, 1],
-                alpha=0.5,
-                s=50,
-                color=label_to_color[label],
-                label=f'Class {label}'
-            )
+        ax_left.scatter(
+            x_0_np[:, 0],
+            x_0_np[:, 1],
+            alpha=0.5,
+            s=10,
+        )
         ax_left.set_xlabel(r'$x_1$')
         ax_left.set_ylabel(r'$x_2$')
         ax_left.set_title('Initial State x(0)')
@@ -137,17 +94,21 @@ class Synthetic2DViz:
         ax_left.legend()
 
         # RIGHT PLOT: Final state x(1) with label colors
-        for i, label in enumerate(unique_labels):
-            mask = sampled_labels_np == label
-            ax_right.scatter(
-                x_1_np[mask, 0],
-                x_1_np[mask, 1],
-                alpha=0.5,
-                s=50,
-                color=label_to_color[label],
-                label=f'Class {label}'
-            )
-
+        ax_right.scatter(
+            x_1_np[:, 0],
+            x_1_np[:, 1],
+            alpha=0.5,
+            s=10,
+        )
+        # Add unit circle for N(0, I) reference
+        circle_right = Circle(
+            (0, 0),
+            1,
+            fill=False,
+            linestyle='--',
+            color='gray',
+        )
+        ax_right.add_patch(circle_right)
         ax_right.set_xlabel(r'$x_1$')
         ax_right.set_ylabel(r'$x_2$')
         ax_right.set_title('Final State x(1)')
@@ -172,7 +133,7 @@ class Synthetic2DViz:
     @classmethod
     def plot_vector_field(
         cls,
-        model: Union[VectorField, NeuralODE, CNF, RealNVP],
+        model: Union[NeuralODE, CNF, RealNVP],
         xlim: Tuple[float, float] = (-2, 2),
         ylim: Tuple[float, float] = (-2, 2),
         n_grid: int = 20,
@@ -219,12 +180,11 @@ class Synthetic2DViz:
         # Get vector field from model once
         # At this point, model is VectorField, NeuralODE, or CNF
         vf = model if isinstance(model, VectorField) else model.vf
-        device = next(vf.parameters()).device
 
         # Convert t to tensor and extract scalar value for title
         t_value = float(t)
         t_tensor = torch.tensor(
-            t_value, dtype=torch.float32, device=device
+            t_value, dtype=torch.float64, device=device
         )
 
         # Create grid
@@ -235,7 +195,7 @@ class Synthetic2DViz:
         # Convert to tensor
         grid_points = torch.tensor(
             np.stack([X.ravel(), Y.ravel()], axis=1),
-            dtype=torch.float32,
+            dtype=torch.float64,
             device=device
         )
 
@@ -308,7 +268,7 @@ class Synthetic2DViz:
             # Convert to tensor
             grid_points = torch.tensor(
                 np.stack([X.ravel(), Y.ravel()], axis=1),
-                dtype=torch.float32,
+                dtype=torch.float64,
                 device=device
             )
 
@@ -324,10 +284,6 @@ class Synthetic2DViz:
                 x_transformed = transform.inv(grid_points)
                 displacement = x_transformed - grid_points
                 title = 'RealNVP Inverse Transform (z → x)'
-            else:
-                raise ValueError(
-                    f"direction must be 'forward' or 'inverse', got {direction}"
-                )
 
             # Reshape displacement to grid
             displacement_np = displacement.cpu().numpy()
@@ -372,43 +328,13 @@ class Synthetic2DViz:
         cls,
         model: Union[NeuralODE, CNF, RealNVP],
         n_samples: int = 20,
-        n_points: int = 100,
+        n_steps: int = 100,
         xlim: Tuple[float, float] = (-3, 3),
         ylim: Tuple[float, float] = (-3, 3),
         axes: Optional[Tuple[Axes, Axes]] = None,
         save_path: Optional[str] = None
     ) -> Tuple[Axes, Axes]:
-        """Plot trajectories starting at z ~ N(0, I) and transforming to x.
-
-        Creates two plots:
-        - Left: Initial z samples from N(0, I) (gray, no labels)
-        - Right: Final transformed state x (gray, no labels)
-          Note: True class labels are unknown when transforming from z ~ N(0, I)
-
-        Works with NeuralODE, CNF, and RealNVP models.
-
-        Args:
-            model (Union[NeuralODE, CNF, RealNVP]): Model.
-
-            n_samples (int): Number of samples to plot trajectories for.
-                Default is 20.
-
-            n_points (int): Number of points in each trajectory
-                (for ODE models). Default is 100.
-
-            xlim (Tuple[float, float]): Limits in x direction.
-
-            ylim (Tuple[float, float]): Limits in y direction.
-
-            axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
-                left and right plots. If None, creates new figure.
-
-            save_path (str, optional): Path to save the figure. If provided,
-                saves the figure to the specified path. Default is None.
-
-        Returns:
-            Tuple[Axes, Axes]: Left and right matplotlib axes.
-        """
+        """Plot trajectories starting at z ~ N(0, I) and transforming to x."""
         if axes is None:
             fig, (ax_left, ax_right) = plt.subplots(
                 1, 2, figsize=(16, 8)
@@ -438,25 +364,14 @@ class Synthetic2DViz:
 
         model.eval()
         with torch.no_grad():
-            t_span = torch.linspace(
-                start=1.0,
-                end=0.0,
-                steps=n_points,
-                device=device
-            )
-            x_t, _ = model(z, t_span, reverse=True)
+            x_t = model.sample(n_samples, n_steps)
 
         # Get initial and final states
         z_np = z.cpu().numpy()
 
-        # Handle different return formats:
-        # - NeuralODE returns trajectory: [n_steps, n_samples, 2]
-        # - CNF returns only final state: [n_samples, 2]
         if x_t.dim() == 3:
-            # Full trajectory from NeuralODE: extract final state
             x_final_np = x_t[-1].cpu().numpy()  # [n_samples, 2]
         elif x_t.dim() == 2:
-            # Already final state from CNF: use directly
             x_final_np = x_t.cpu().numpy()  # [n_samples, 2]
         else:
             raise ValueError(
@@ -468,17 +383,19 @@ class Synthetic2DViz:
         ax_left.scatter(
             z_np[:, 0],
             z_np[:, 1],
-            color='gray',
             marker='o',
-            s=50,
+            s=10,
             alpha=0.6,
             linewidths=1
         )
 
         # Unit circle (reference)
         circle = Circle(
-            (0, 0), 2, fill=False, linestyle='--',
-            color='gray', alpha=0.5, label='|z|=2'
+            (0, 0),
+            2,
+            fill=False,
+            linestyle='--',
+            color='gray',
         )
         ax_left.add_patch(circle)
 
@@ -493,9 +410,8 @@ class Synthetic2DViz:
         ax_right.scatter(
             x_final_np[:, 0],
             x_final_np[:, 1],
-            color='gray',
             alpha=0.5,
-            s=50
+            s=10
         )
 
         ax_right.set_xlabel(r'$x_1$')
@@ -565,17 +481,18 @@ class Synthetic2DViz:
         ax_left.scatter(
             z_np[:, 0],
             z_np[:, 1],
-            color='gray',
             marker='o',
-            s=50,
+            s=10,
             alpha=0.6,
             linewidths=1
         )
 
         # Unit circle (reference)
         circle = Circle(
-            (0, 0), 2, fill=False, linestyle='--',
-            color='gray', alpha=0.5, label='|z|=2'
+            (0, 0), 2,
+            fill=False,
+            linestyle='--',
+            color='gray',
         )
         ax_left.add_patch(circle)
 
@@ -591,9 +508,8 @@ class Synthetic2DViz:
         ax_right.scatter(
             x_np[:, 0],
             x_np[:, 1],
-            color='gray',
             alpha=0.5,
-            s=50
+            s=10
         )
 
         ax_right.set_xlabel(r'$x_1$')
@@ -622,10 +538,8 @@ class Synthetic2DViz:
     def plot_data_distribution(
         cls,
         data: torch.Tensor | np.ndarray,
-        labels: Optional[torch.Tensor | np.ndarray] = None,
         ax: Optional[Axes] = None,
         title: str = 'Data Distribution',
-        cmap: str = 'tab10',
         save_path: Optional[str] = None
     ) -> Axes:
         """Plot data distribution.
@@ -634,16 +548,9 @@ class Synthetic2DViz:
             data (torch.Tensor | np.ndarray): Data tensor or array with shape
                 (n_samples, 2).
 
-            labels (torch.Tensor | np.ndarray, optional): Labels tensor or array
-                with shape (n_samples,). If provided, points are colored by label.
-                Default is None.
-
             ax (Axes): Matplotlib axis.
 
             title (str): Plot title.
-
-            cmap (str): Colormap name for coloring by labels.
-                Default is 'tab10'.
 
             save_path (str, optional): Path to save the figure. If provided,
                 saves the figure to the specified path. Default is None.
@@ -654,40 +561,19 @@ class Synthetic2DViz:
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-        # Convert to numpy if needed
+        # Convert to numpy
         if isinstance(data, torch.Tensor):
             data = data.cpu().numpy()
-        if labels is not None and isinstance(labels, torch.Tensor):
-            labels = labels.cpu().numpy()
-
-        # Plot with or without labels
-        if labels is not None:
-            # Get unique labels and assign colors
-            unique_labels = np.unique(labels)
-            colors = plt.cm.get_cmap(cmap)(
-                np.linspace(0, 1, len(unique_labels))
-            )
-
-            # Plot each label with different color
-            for i, label in enumerate(unique_labels):
-                mask = labels == label
-                ax.scatter(
-                    data[mask, 0],
-                    data[mask, 1],
-                    alpha=0.5,
-                    s=50,
-                    color=colors[i],
-                    label=f'Class {label}'
-                )
-            ax.legend()
         else:
-            # Plot without labels
-            ax.scatter(
-                data[:, 0],
-                data[:, 1],
-                alpha=0.5,
-                s=50
-            )
+            data = np.array(data)
+
+        # Plot data points
+        ax.scatter(
+            data[:, 0],
+            data[:, 1],
+            alpha=0.5,
+            s=10
+        )
         ax.set_xlabel(r'$x_1$')
         ax.set_ylabel(r'$x_2$')
         ax.set_title(title)
@@ -711,6 +597,8 @@ class Synthetic2DViz:
 
 class MNISTViz:
     """Visualization class for MNIST datasets."""
+    pca = None  # Class attribute for PCA instance
+
     @classmethod
     def project_to_2d(
         cls,
@@ -737,7 +625,7 @@ class MNISTViz:
         else:
             data_2d = cls.pca.transform(data_np)
 
-        return torch.tensor(data_2d, dtype=torch.float32)
+        return torch.tensor(data_2d, dtype=torch.float64)
 
     @classmethod
     def plot_trajectories(
@@ -745,8 +633,7 @@ class MNISTViz:
         model: Union[NeuralODE, CNF, VectorField],
         dataset,
         n_samples: int = 20,
-        t_span: Optional[torch.Tensor] = None,
-        n_points: int = 100,
+        n_steps: int = 100,
         axes: Optional[Tuple[Axes, Axes]] = None,
         save_path: Optional[str] = None,
         fit_pca_on_data: bool = True
@@ -766,9 +653,7 @@ class MNISTViz:
             n_samples (int): Number of random samples to plot.
                 Default is 20.
 
-            t_span (torch.Tensor): Time points for integration.
-
-            n_points (int): Number of points in trajectory.
+            n_steps (int): Number of points in trajectory.
 
             axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
                 left and right plots. If None, creates new figure.
@@ -810,9 +695,6 @@ class MNISTViz:
         x_0 = data[indices].to(device)
         sampled_labels = labels[indices] if labels is not None else None
 
-        if t_span is None:
-            t_span = torch.linspace(0, 1, n_points).to(device)
-
         # Fit PCA on initial data if requested
         if fit_pca_on_data:
             _ = cls.project_to_2d(x_0, fit_pca=True)
@@ -821,9 +703,9 @@ class MNISTViz:
         model.eval()
         with torch.no_grad():
             if is_neural_ode:
-                x_t, _ = model(x_0, t_span)
+                x_t, _ = model(x_0, n_steps)
             else:
-                x_t, _ = model(x_0, t_span, reverse=False)
+                x_t, _ = model(x_0, n_steps)
 
         # Get final state x(1)
         if x_t.dim() == 3:
@@ -840,71 +722,31 @@ class MNISTViz:
         x_0_np = x_0_2d.cpu().numpy()
         x_1_np = x_1_2d.cpu().numpy()
 
-        if sampled_labels is not None:
-            labels_np = sampled_labels.cpu().numpy()
-            unique_labels = np.unique(labels_np)
-            colors = plt.cm.get_cmap('tab10')(
-                np.linspace(0, 1, len(unique_labels))
-            )
-            label_to_color = {
-                label: colors[i] for i, label in enumerate(unique_labels)
-            }
-        else:
-            labels_np = None
-
         # LEFT PLOT: Initial state projected to 2D
-        if labels_np is not None:
-            for label in unique_labels:
-                mask = labels_np == label
-                ax_left.scatter(
-                    x_0_np[mask, 0],
-                    x_0_np[mask, 1],
-                    alpha=0.5,
-                    s=50,
-                    color=label_to_color[label],
-                    label=f'Class {label}'
-                )
-            ax_left.legend()
-        else:
-            ax_left.scatter(
+        ax_left.scatter(
                 x_0_np[:, 0],
                 x_0_np[:, 1],
                 alpha=0.5,
-                s=50,
-                color='gray'
+                s=10,
             )
 
         ax_left.set_xlabel('PC1')
         ax_left.set_ylabel('PC2')
-        ax_left.set_title('Initial State x(0) (2D projection)')
+        ax_left.set_title('Initial State x(0)')
         ax_left.grid(True, alpha=0.3)
         ax_left.axis('equal')
 
         # RIGHT PLOT: Final state projected to 2D
-        if labels_np is not None:
-            for label in unique_labels:
-                mask = labels_np == label
-                ax_right.scatter(
-                    x_1_np[mask, 0],
-                    x_1_np[mask, 1],
-                    alpha=0.5,
-                    s=50,
-                    color=label_to_color[label],
-                    label=f'Class {label}'
-                )
-            ax_right.legend()
-        else:
-            ax_right.scatter(
+        ax_right.scatter(
                 x_1_np[:, 0],
                 x_1_np[:, 1],
                 alpha=0.5,
-                s=50,
-                color='gray'
+                s=10,
             )
 
         ax_right.set_xlabel('PC1')
         ax_right.set_ylabel('PC2')
-        ax_right.set_title('Final State x(1) (2D projection)')
+        ax_right.set_title('Final State x(1)')
         ax_right.grid(True, alpha=0.3)
         ax_right.axis('equal')
 
@@ -1023,14 +865,14 @@ class MNISTViz:
         grid_points_highd = cls.pca.inverse_transform(grid_points_2d)
         grid_points = torch.tensor(
             grid_points_highd,
-            dtype=torch.float32,
+            dtype=torch.float64,
             device=device
         )
 
         # Calculate vector field in high-dimensional space
         t_value = float(t)
         t_tensor = torch.tensor(
-            t_value, dtype=torch.float32, device=device
+            t_value, dtype=torch.float64, device=device
         )
 
         with torch.no_grad():
@@ -1056,7 +898,7 @@ class MNISTViz:
 
         ax.set_xlabel('PC1')
         ax.set_ylabel('PC2')
-        ax.set_title(f'Vector Field at t={t_value:.2f} (2D projection)')
+        ax.set_title(f'Vector Field at t={t_value:.2f}')
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         ax.grid(True, alpha=0.3)
@@ -1081,7 +923,7 @@ class MNISTViz:
         cls,
         model: Union[NeuralODE, CNF, RealNVP],
         n_samples: int = 20,
-        n_points: int = 100,
+        n_steps: int = 100,
         axes: Optional[Tuple[Axes, Axes]] = None,
         save_path: Optional[str] = None,
         data_sample: Optional[torch.Tensor] = None
@@ -1098,7 +940,7 @@ class MNISTViz:
             n_samples (int): Number of samples to plot trajectories for.
                 Default is 20.
 
-            n_points (int): Number of points in each trajectory
+            n_steps (int): Number of points in each trajectory
                 (for ODE models). Default is 100.
 
             axes (Tuple[Axes, Axes], optional): Two matplotlib axes for
@@ -1136,13 +978,7 @@ class MNISTViz:
 
         model.eval()
         with torch.no_grad():
-            t_span = torch.linspace(
-                start=1.0,
-                end=0.0,
-                steps=n_points,
-                device=device
-            )
-            x_t, _ = model(z, t_span, reverse=True)
+            x_t = model(z, n_steps)
 
         # Get final state
         if x_t.dim() == 3:
@@ -1152,7 +988,8 @@ class MNISTViz:
         else:
             raise ValueError(
                 f"Unexpected x_t shape: {x_t.shape}. "
-                f"Expected 2D [n_samples, features] or 3D [n_steps, n_samples, features]"
+                f"Expected 2D [n_samples, features] or "
+                "3D [n_steps, n_samples, features]"
             )
 
         # Fit PCA on transformed samples or provided data
@@ -1174,16 +1011,16 @@ class MNISTViz:
         ax_left.scatter(
             z_np[:, 0],
             z_np[:, 1],
-            color='gray',
             marker='o',
-            s=50,
+            s=10,
             alpha=0.6,
             linewidths=1
         )
 
         ax_left.set_xlabel('PC1')
         ax_left.set_ylabel('PC2')
-        ax_left.set_title('Sample points from normal z(0) ~ N(0,I) (2D projection)')
+        ax_left.set_title(
+            'Sample points from normal z(0) ~ N(0,I)')
         ax_left.grid(True, alpha=0.3)
         ax_left.axis('equal')
 
@@ -1191,14 +1028,13 @@ class MNISTViz:
         ax_right.scatter(
             x_final_np[:, 0],
             x_final_np[:, 1],
-            color='gray',
             alpha=0.5,
-            s=50
+            s=10
         )
 
         ax_right.set_xlabel('PC1')
         ax_right.set_ylabel('PC2')
-        ax_right.set_title('Final state x (transformed, 2D projection)')
+        ax_right.set_title('Final state x')
         ax_right.grid(True, alpha=0.3)
         ax_right.axis('equal')
 
@@ -1276,16 +1112,15 @@ class MNISTViz:
         ax_left.scatter(
             z_np[:, 0],
             z_np[:, 1],
-            color='gray',
             marker='o',
-            s=50,
+            s=10,
             alpha=0.6,
             linewidths=1
         )
 
         ax_left.set_xlabel('PC1')
         ax_left.set_ylabel('PC2')
-        ax_left.set_title('Sample points from normal z ~ N(0,I) (2D projection)')
+        ax_left.set_title('Sample points from normal z ~ N(0,I)')
         ax_left.grid(True, alpha=0.3)
         ax_left.axis('equal')
 
@@ -1293,14 +1128,13 @@ class MNISTViz:
         ax_right.scatter(
             x_np[:, 0],
             x_np[:, 1],
-            color='gray',
             alpha=0.5,
-            s=50
+            s=10
         )
 
         ax_right.set_xlabel('PC1')
         ax_right.set_ylabel('PC2')
-        ax_right.set_title('Transformed samples x = T⁻¹(z) (2D projection)')
+        ax_right.set_title('Transformed samples x = T⁻¹(z)')
         ax_right.grid(True, alpha=0.3)
         ax_right.axis('equal')
 

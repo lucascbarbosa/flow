@@ -16,7 +16,6 @@ class CNF(nn.Module):
     def __init__(
         self,
         vector_field: VectorField,
-        method: Literal['dopri5', 'euler', 'rk4'] = 'dopri5',
         rtol: float = 1e-5,
         atol: float = 1e-5,
         base_dist: Optional[Distribution] = None,
@@ -26,9 +25,6 @@ class CNF(nn.Module):
 
         Args:
             vector_field (VectorField): Vector field module f(x, t).
-
-            method (Literal['dopri5', 'euler', 'rk4']): ODE solver method.
-                Default is 'dopri5'.
 
             rtol (float): Relative tolerance for ODE solver. Default is 1e-5.
 
@@ -41,7 +37,6 @@ class CNF(nn.Module):
         """
         super().__init__()
         self.vf = vector_field
-        self.method = method
         self.rtol = rtol
         self.atol = atol
         self.trace_scale = trace_scale
@@ -99,13 +94,15 @@ class CNF(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        t_span: torch.Tensor | None = None,
+        n_steps: int = 10,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Transform x -> z (forward) or z -> x (reverse)."""
-        if t_span is None:
-            t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
-        else:
-            t_span = t_span.to(x.device)
+        t_span = torch.linspace(
+            0., 1.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
 
         if not x.requires_grad and torch.is_grad_enabled():
             x = x.clone().requires_grad_(True)
@@ -113,7 +110,7 @@ class CNF(nn.Module):
         log_det_init = torch.zeros(
             x.shape[0], 1,
             device=device,
-            dtype=x.dtype,
+            dtype=torch.float64,
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
@@ -122,7 +119,7 @@ class CNF(nn.Module):
             self._augmented_dynamics,
             state_init,
             t_span,
-            method=self.method,
+            method='dopri5',
             rtol=self.rtol,
             atol=self.atol,
             adjoint_params=tuple(self.vf.parameters())
@@ -138,7 +135,6 @@ class CNF(nn.Module):
     def log_prob(
         self,
         x: torch.Tensor,
-        t_span: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Calculate log p(x) using change of variables."""
         # Ensure x requires grad for odeint_adjoint to work properly
@@ -146,18 +142,18 @@ class CNF(nn.Module):
             x = x.clone().requires_grad_(True)
 
         # Transform x -> z
-        z, log_det = self.forward(x, t_span)
+        z, log_det = self.forward(x)
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
         log_prob_z = self.base_dist.log_prob(z)
-        log_prob_x = log_prob_z + log_det
+        log_prob_x = log_prob_z - log_det
         return log_prob_x
 
     def sample(
         self,
         num_samples: int,
-        n_steps: int = 100,
+        n_steps: int = 10,
     ) -> torch.Tensor:
         """Generate samples x ~ p(x) via z ~ p(z) -> x."""
         t_span = torch.linspace(
@@ -168,9 +164,16 @@ class CNF(nn.Module):
         )
 
         # Sample z ~ p(z)
-        base_dist = self._get_base_dist(device)
-        z = base_dist.sample((num_samples,)).to(device)
+        z = self.base_dist.sample((num_samples,)).to(device)
 
         # Transform z -> x
-        x, _ = self.forward(z, t_span)
-        return x
+        x_t = odeint_adjoint(
+            self.vf,
+            z,
+            t_span,
+            method='dopri5',
+            rtol=self.rtol,
+            atol=self.atol,
+            adjoint_params=tuple(self.vf.parameters())
+        )
+        return x_t[-1]

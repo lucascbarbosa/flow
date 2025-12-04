@@ -9,17 +9,91 @@ from tqdm import tqdm
 from zuko.flows import RealNVP
 
 
+def mmd_loss(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    kernel: str = 'rbf',
+    sigma: float = 1.0
+) -> torch.Tensor:
+    """Compute Maximum Mean Discrepancy (MDD) between two samples.
+
+    Args:
+        x (torch.Tensor): First sample, shape (n, d).
+        y (torch.Tensor): Second sample, shape (m, d).
+        kernel (str): Kernel type, 'rbf' for Gaussian RBF kernel.
+            Default is 'rbf'.
+        sigma (float): Bandwidth parameter for RBF kernel. Default is 1.0.
+
+    Returns:
+        torch.Tensor: MDD² value (scalar).
+    """
+    if kernel == 'rbf':
+        def rbf_kernel(
+            x1: torch.Tensor, x2: torch.Tensor
+        ) -> torch.Tensor:
+            """RBF kernel: k(x1, x2) = exp(-||x1 - x2||² / (2*sigma²))."""
+            # Compute pairwise squared distances
+            # x1: (n, d), x2: (m, d) -> (n, m)
+            x1_norm = (x1 ** 2).sum(dim=1, keepdim=True)  # (n, 1)
+            x2_norm = (x2 ** 2).sum(dim=1, keepdim=True)  # (m, 1)
+            dist_sq = x1_norm + x2_norm.t() - 2 * x1 @ x2.t()  # (n, m)
+            return torch.exp(-dist_sq / (2 * sigma ** 2))
+
+        k_xx = rbf_kernel(x, x)  # (n, n)
+        k_yy = rbf_kernel(y, y)  # (m, m)
+        k_xy = rbf_kernel(x, y)  # (n, m)
+
+        # MMD² = E[k(x, x')] + E[k(y, y')] - 2*E[k(x, y)]
+        # Use unbiased U-statistic estimator
+        # (exclude diagonal for same-sample terms)
+        n = x.shape[0]
+        m = y.shape[0]
+
+        # E[k(x, x')]: mean of off-diagonal elements
+        if n > 1:
+            xx_term = (k_xx.sum() - k_xx.trace()) / (n * (n - 1))
+        else:
+            xx_term = torch.tensor(0.0, device=x.device, dtype=x.dtype)
+
+        # E[k(y, y')]: mean of off-diagonal elements
+        if m > 1:
+            yy_term = (k_yy.sum() - k_yy.trace()) / (m * (m - 1))
+        else:
+            yy_term = torch.tensor(0.0, device=y.device, dtype=y.dtype)
+
+        # E[k(x, y)]: mean of all cross terms
+        xy_term = k_xy.mean()
+
+        # MMD²
+        mmd_sq = xx_term + yy_term - 2 * xy_term
+
+        return mmd_sq
+    else:
+        raise ValueError(f"Unknown kernel: {kernel}")
+
+
 def train_neural_ode(
     model: NeuralODE,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     num_epochs: int = 100,
-    n_steps: int = 100
+    n_steps: int = 100,
+    mmd_sigma: float = 1.0
 ) -> None:
-    """Train Neural ODE for classification task."""
+    """Train Neural ODE using Maximum Mean Discrepancy (MDD) loss.
+
+    Args:
+        model (NeuralODE): Neural ODE model.
+        dataloader (DataLoader): DataLoader for training data.
+        optimizer (Optimizer): Optimizer for training.
+        device (Device): Device to run training on.
+        num_epochs (int): Number of training epochs.
+        n_steps (int): Number of steps to integrate the ODE.
+        mmd_sigma (float): Bandwidth parameter for RBF kernel in MDD.
+            Default is 1.0.
+    """
     model.train()
-    criterion = nn.MSELoss()
 
     for epoch in range(num_epochs):
         total_loss = 0.0
@@ -33,11 +107,11 @@ def train_neural_ode(
             x_t = model(x0, n_steps)
             z = x_t[-1]
 
-            # Generate random target
+            # Generate random target from standard normal
             z_target = torch.randn_like(z)
 
-            # Loss: Mean Squared Error
-            loss = criterion(z, z_target)
+            # Loss: Maximum Mean Discrepancy (MDD)
+            loss = mmd_loss(z, z_target, kernel='rbf', sigma=mmd_sigma)
 
             loss.backward()
             optimizer.step()
@@ -57,7 +131,6 @@ def train_cnf(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     num_epochs: int = 100,
-    n_steps: int = 100
 ) -> None:
     """Train CNF using negative log-likelihood.
 

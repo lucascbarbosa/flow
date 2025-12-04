@@ -45,7 +45,7 @@ class Synthetic2D(Dataset):
                 noise=noise,
                 random_state=42
             )
-        self.data = torch.tensor(X, dtype=torch.float32)
+        self.data = torch.tensor(X, dtype=torch.float64)
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""
@@ -119,7 +119,7 @@ class MNISTReduced(Dataset):
         pca = PCA(n_components=n_components)
         data_reduced = pca.fit_transform(data)
 
-        self.data = torch.tensor(data_reduced, dtype=torch.float32)
+        self.data = torch.tensor(data_reduced, dtype=torch.float64)
         self.pca = pca
 
     def __len__(self) -> int:

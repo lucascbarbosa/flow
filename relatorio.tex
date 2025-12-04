@@ -201,7 +201,7 @@ Implementamos \texttt{divergence\_exact} que calcula o trace exato iterando sobr
 \begin{lstlisting}[language=Python]
 def divergence_exact(f, x):
     batch_size, dim = x.shape
-    trace = torch.zeros(batch_size, device=x.device)
+    trace = torch.zeros(batch_size, device=device)
     for i in range(dim):
         df_i = torch.autograd.grad(
             f[:, i].sum(), x, 
@@ -220,10 +220,10 @@ FFJORD utiliza o estimador Hutchinson para reduzir a complexidade:
 
 \begin{lstlisting}[language=Python]
 def hutchinson_trace_estimator(f, x, n_samples=1, noise='rademacher'):
-    trace = torch.zeros(x.shape[0], device=x.device)
+    trace = torch.zeros(x.shape[0], device=device)
     for _ in range(n_samples):
         if noise == 'rademacher':
-            epsilon = torch.randint(0, 2, x.shape, device=x.device) * 2 - 1
+            epsilon = torch.randint(0, 2, x.shape, device=device) * 2 - 1
         else:  # gaussian
             epsilon = torch.randn_like(x)
         

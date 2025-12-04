@@ -4,6 +4,9 @@ from typing import Callable, Literal
 from torch import autograd
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 def divergence_exact(
     f: Callable[[torch.Tensor], torch.Tensor],
     x: torch.Tensor,
@@ -26,7 +29,7 @@ def divergence_exact(
         torch.Tensor: Trace of the Jacobian with shape (batch,).
     """
     # Create identity matrix for batched gradient computation
-    identity = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
+    identity = torch.eye(x.shape[-1], dtype=torch.float64, device=device)
     grad_outputs = identity.expand(*x.shape, -1).movedim(-1, 0)
     # grad_outputs shape: (dim, batch, dim)
 
@@ -132,13 +135,13 @@ def divergence_hutchinson(
         if distribution == 'rademacher':
             # Rademacher: ε ~ Uniform({-1, +1})
             epsilon = (
-                torch.randint(0, 2, (batch_size, dim), device=x.device,
-                              dtype=x.dtype) * 2 - 1
+                torch.randint(0, 2, (batch_size, dim), device=device,
+                              dtype=torch.float64) * 2 - 1
             )
         elif distribution == 'gaussian':
             # Gaussian: ε ~ N(0, I)
             epsilon = torch.randn(
-                batch_size, dim, device=x.device, dtype=x.dtype
+                batch_size, dim, device=device, dtype=torch.float64
             )
 
         # Compute ε^T * f(x)

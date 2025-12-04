@@ -11,20 +11,13 @@ from typing import Dict
 
 
 def compute_regularizations(
-    vf: VectorField, x: torch.Tensor, t: torch.Tensor
+    vf: VectorField,
+    x: torch.Tensor,
+    t: torch.Tensor
 ) -> Dict[str, torch.Tensor]:
-    """Computa termos de regularização.
-
-    Args:
-        vf: Vector field module.
-        x: Input tensor with shape (batch, features).
-        t: Time tensor (scalar or batch).
-
-    Returns:
-        Dictionary with 'kinetic_energy' and 'jacobian_frobenius' keys.
-    """
+    """Computa termos de regularização."""
     x = x.requires_grad_(True)
-    v = vf(t, x)  # (batch, d)
+    v = vf(t, x)
 
     # R1: Kinetic Energy
     # Penaliza velocidades altas: E[||v||²]
@@ -88,19 +81,19 @@ def train_cnf_with_regularization(
         total_jf = 0.0
         n_batches = 0
 
-        for batch in tqdm(
+        for x0 in tqdm(
             dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"
         ):
-            x = batch[0].to(device)
             optimizer.zero_grad()
+            x0 = x0.to(device)
 
             # Calculate log-likelihood
-            log_prob = model.log_prob(x)
+            log_prob = model.log_prob(x0)
             nll = -log_prob.mean()
 
             # Compute regularizations at time reg_time
             t_reg = torch.tensor(reg_time, device=device)
-            regs = compute_regularizations(model.vf, x, t_reg)
+            regs = compute_regularizations(model.vf, x0, t_reg)
             ke = regs['kinetic_energy']
             jf = regs['jacobian_frobenius']
 
@@ -168,7 +161,7 @@ def compare_regularizations():
         vf = VectorField(
             features=2, hidden_dims=[64, 64], time_embed_dim=16
         )
-        model = CNF(vf, method='dopri5', rtol=1e-3, atol=1e-4).to(device)
+        model = CNF(vf, rtol=1e-3, atol=1e-4).to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
         # Treinar com regularização

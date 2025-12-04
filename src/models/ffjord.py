@@ -113,12 +113,12 @@ class FFJORD(nn.Module):
         if t_span is None:
             if reverse:
                 # z -> x: integrate from t=1 to t=0
-                t_span = torch.tensor([1., 0.], device=x.device, dtype=x.dtype)
+                t_span = torch.tensor([1., 0.], device=device, dtype=torch.float64)
             else:
                 # x -> z: integrate from t=0 to t=1
-                t_span = torch.tensor([0., 1.], device=x.device, dtype=x.dtype)
+                t_span = torch.tensor([0., 1.], device=device, dtype=torch.float64)
         else:
-            t_span = t_span.to(x.device)
+            t_span = t_span.to(device)
 
         # Ensure x is 2D: [batch, features]
         if x.dim() == 1:
@@ -135,8 +135,8 @@ class FFJORD(nn.Module):
         log_det_init = torch.zeros(
             x.shape[0],
             1,
-            device=x.device,
-            dtype=x.dtype,
+            device=device,
+            dtype=torch.float64,
             requires_grad=False
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
