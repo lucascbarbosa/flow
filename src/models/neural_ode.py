@@ -17,8 +17,6 @@ class NeuralODE(nn.Module):
         solver: Literal['euler', 'rk4', 'dopri5'] = 'dopri5',
         rtol: float = 1e-3,
         atol: float = 1e-4,
-        n_outputs: int = 2,
-        hidden_dims: list[int] = [64, 64]
     ) -> None:
         """Initialize NeuralODE."""
         super().__init__()
@@ -26,15 +24,6 @@ class NeuralODE(nn.Module):
         self.solver = solver
         self.rtol = rtol
         self.atol = atol
-
-        features = vector_field.features
-        dims = [features] + hidden_dims + [n_outputs]
-        layers = []
-        for i in range(len(dims) - 1):
-            layers.append(nn.Linear(dims[i], dims[i + 1]))
-            if i < len(dims) - 2:  # No activation on last layer
-                layers.append(nn.ReLU())
-        self.mlp = nn.Sequential(*layers)
 
     def forward(
         self,

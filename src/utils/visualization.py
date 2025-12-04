@@ -406,7 +406,7 @@ class Synthetic2DViz:
 
         ax_left.set_xlabel(r'$x_1$')
         ax_left.set_ylabel(r'$x_2$')
-        ax_left.set_title('Sample points from normal z(0) ~ N(0,I)')
+        ax_left.set_title('Sample points from normal z ~ N(0,I)')
         ax_left.set_xlim(xlim)
         ax_left.set_ylim(ylim)
         ax_left.grid(True, alpha=0.3)
@@ -421,7 +421,7 @@ class Synthetic2DViz:
 
         ax_right.set_xlabel(r'$x_1$')
         ax_right.set_ylabel(r'$x_2$')
-        ax_right.set_title('Final state x (transformed)')
+        ax_right.set_title('Final state x')
         ax_right.set_xlim(xlim)
         ax_right.set_ylim(ylim)
         ax_right.grid(True, alpha=0.3)
@@ -1025,7 +1025,7 @@ class MNISTViz:
         ax_left.set_xlabel('PC1')
         ax_left.set_ylabel('PC2')
         ax_left.set_title(
-            'Sample points from normal z(0) ~ N(0,I)')
+            'Sample points from normal z ~ N(0,I)')
         ax_left.grid(True, alpha=0.3)
         ax_left.axis('equal')
 
