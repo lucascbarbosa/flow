@@ -1,14 +1,11 @@
-"""
-Experimento 3: Comparação de arquiteturas de Vector Field.
-"""
+"""Experimento 3: Comparação de arquiteturas de Vector Field."""
 import torch
 import torch.optim as optim
+from src.models.vector_field import VectorField, ResNetVF, TimeConditionedVF
+from src.models.neural_ode import NeuralODE
+from src.utils.datasets import Synthetic2D, get_dataloader
+from src.utils.training import train_neural_ode
 from torch.utils.data import DataLoader
-
-from ..models.vector_field import VectorField, ResNetVF, TimeConditionedVF
-from ..models.neural_ode import NeuralODE
-from ..utils.datasets import Synthetic2D, get_dataloader
-from ..utils.training import train_neural_ode
 
 
 def compare_architectures():
@@ -50,4 +47,3 @@ if __name__ == '__main__':
     print("\n=== Resumo ===")
     for arch, result in results.items():
         print(f"{arch}: Treinado")
-

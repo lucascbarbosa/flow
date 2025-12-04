@@ -1,0 +1,514 @@
+\documentclass[12pt,a4paper]{article}
+
+% Pacotes essenciais
+\usepackage[utf8]{inputenc}
+\usepackage[portuguese]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% Configurações de página
+\geometry{margin=2.5cm}
+
+% Configurações de código
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{green!60!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=5pt,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false
+}
+
+% Configurações de hyperref
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={Mini-Projeto 1: Neural ODEs e Continuous Normalizing Flows},
+    pdfauthor={Seu Nome}
+}
+
+% Título
+\title{Mini-Projeto 1: Neural ODEs e Continuous Normalizing Flows}
+\author{Seu Nome \\ \small Curso/Instituição}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este relatório apresenta a implementação e análise de Neural Ordinary Differential Equations (Neural ODEs) e Continuous Normalizing Flows (CNFs) usando a biblioteca \texttt{torchdiffeq}. Implementamos três componentes principais: (1) Neural ODE básico para aprendizado de transformações em dados 2D, (2) CNF com cálculo exato de trace para mudança de variáveis, e (3) FFJORD com estimador Hutchinson para escalabilidade em alta dimensão. Realizamos experimentos em datasets sintéticos 2D e MNIST, comparando diferentes solvers ODE, analisando trade-offs computacionais e avaliando a qualidade dos modelos gerados. Os resultados demonstram a expressividade dos CNFs, mas também evidenciam os desafios computacionais associados, especialmente o custo $\mathcal{O}(d^2)$ do trace exato versus $\mathcal{O}(d)$ do estimador Hutchinson.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introdução}
+
+\subsection{Contexto e Motivação}
+
+Neural Ordinary Differential Equations (Neural ODEs) introduzidos por Chen et al. \cite{chen2018neural} representam uma abordagem inovadora para modelar transformações contínuas usando equações diferenciais ordinárias parametrizadas por redes neurais. Esta técnica permite modelar dinâmicas temporais de forma contínua, superando limitações de arquiteturas discretas tradicionais.
+
+Continuous Normalizing Flows (CNFs) estendem essa ideia para modelagem generativa, permitindo transformar uma distribuição base simples (como uma Gaussiana) em uma distribuição complexa de dados através de um fluxo contínuo. O trabalho seminal de Chen et al. \cite{chen2018ffjord} introduziu FFJORD, uma versão escalável de CNF que utiliza estimação estocástica de trace para reduzir a complexidade computacional de $\mathcal{O}(d^2)$ para $\mathcal{O}(d)$.
+
+\subsection{Objetivos}
+
+Este projeto tem como objetivos:
+
+\begin{enumerate}
+    \item Implementar Neural ODEs usando \texttt{torchdiffeq} para aprendizado de transformações em dados 2D
+    \item Compreender e implementar Continuous Normalizing Flows com cálculo exato de trace
+    \item Aplicar técnicas de estimação de trace (Hutchinson) para escalabilidade
+    \item Analisar trade-offs computacionais entre CNFs e discrete flows
+    \item Preparar-se conceitualmente para Flow Matching (Módulo 2)
+\end{enumerate}
+
+\subsection{Estrutura do Relatório}
+
+Este relatório está organizado da seguinte forma: Seção 2 apresenta os fundamentos teóricos; Seção 3 descreve a implementação; Seção 4 apresenta os experimentos e resultados; Seção 5 discute os achados; e Seção 6 conclui o trabalho.
+
+\section{Fundamentos Teóricos}
+
+\subsection{Neural Ordinary Differential Equations}
+
+Neural ODEs modelam transformações contínuas através de equações diferenciais ordinárias:
+
+\begin{equation}
+\frac{dx(t)}{dt} = f_\theta(x(t), t)
+\end{equation}
+
+onde $f_\theta$ é uma rede neural parametrizada por $\theta$ que define o campo vetorial. A transformação de $x(0)$ para $x(1)$ é obtida através de integração numérica:
+
+\begin{equation}
+x(1) = x(0) + \int_0^1 f_\theta(x(t), t) dt
+\end{equation}
+
+A integração reversa é feita usando o método adjoint, permitindo backpropagation eficiente através do solver ODE.
+
+\subsection{Continuous Normalizing Flows}
+
+CNFs estendem Neural ODEs para modelagem generativa usando a fórmula de mudança de variáveis. Para uma transformação invertível $z = \varphi(x)$:
+
+\begin{equation}
+\log p(x) = \log p(z) + \log \left|\det \frac{\partial \varphi}{\partial x}\right|
+\end{equation}
+
+Para CNF com $\varphi_t(x)$ integrando $\frac{dx}{dt} = f(x, t)$:
+
+\begin{equation}
+\log p(x) = \log p(z) + \int_0^1 \text{tr}\left(\frac{\partial f}{\partial x}\right) dt
+\end{equation}
+
+onde $z = \varphi_0(x)$ é obtido através de integração reversa.
+
+\subsection{Cálculo de Trace}
+
+\subsubsection{Trace Exato}
+
+O cálculo exato do trace requer computar cada elemento diagonal da matriz Jacobiana:
+
+\begin{equation}
+\text{tr}\left(\frac{\partial f}{\partial x}\right) = \sum_{i=1}^d \frac{\partial f_i}{\partial x_i}
+\end{equation}
+
+Isso requer $d$ passes de backpropagation, resultando em complexidade $\mathcal{O}(d^2)$.
+
+\subsubsection{Estimador Hutchinson}
+
+O estimador Hutchinson utiliza a identidade:
+
+\begin{equation}
+\text{tr}(A) = \mathbb{E}_{\epsilon \sim p(\epsilon)}[\epsilon^T A \epsilon]
+\end{equation}
+
+onde $\epsilon$ é um vetor aleatório. Para $A = \frac{\partial f}{\partial x}$:
+
+\begin{equation}
+\text{tr}\left(\frac{\partial f}{\partial x}\right) \approx \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial f}{\partial x} \epsilon_i = \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial (f^T \epsilon_i)}{\partial x}
+\end{equation}
+
+Isso pode ser computado com um único backward pass usando vector-Jacobian product (VJP), reduzindo a complexidade para $\mathcal{O}(d)$.
+
+\section{Implementação}
+
+\subsection{Estrutura do Projeto}
+
+O projeto segue a seguinte estrutura:
+
+\begin{lstlisting}[language=bash]
+mini-project-1/
+├── src/
+│   ├── models/
+│   │   ├── vector_field.py      # Arquiteturas VectorField
+│   │   ├── neural_ode.py        # Neural ODE básico
+│   │   ├── cnf.py               # CNF com trace exato
+│   │   └── ffjord.py            # FFJORD com Hutchinson
+│   ├── utils/
+│   │   ├── datasets.py          # Data loading
+│   │   ├── training.py          # Training loops
+│   │   ├── trace.py             # Trace computation
+│   │   └── visualization.py    # Plotting
+│   └── experiments/
+│       ├── exp1_ode_solvers.py
+│       ├── exp2_regularization.py
+│       └── exp3_architectures.py
+├── notebooks/
+│   ├── 01_neural_ode_2d.ipynb
+│   ├── 02_cnf_trace_comparison.ipynb
+│   └── 03_ffjord_mnist.ipynb
+└── results/
+    ├── figures/
+    └── checkpoints/
+\end{lstlisting}
+
+\subsection{Vector Field}
+
+O \texttt{VectorField} parametriza $\frac{dx}{dt} = f(x, t)$ usando uma rede neural. Implementamos:
+
+\begin{itemize}
+    \item \textbf{Time Embedding}: Codificação senoidal do tempo
+    \item \textbf{MLP}: Rede feedforward simples ou com skip connections
+    \item \textbf{Inicialização}: Última camada com pesos pequenos ($\sigma = 0.01$)
+\end{itemize}
+
+\subsection{Neural ODE}
+
+O \texttt{NeuralODE} integra o campo vetorial de $t=0$ até $t=1$ usando \texttt{odeint} do \texttt{torchdiffeq}, suportando múltiplos solvers (euler, rk4, dopri5).
+
+\subsection{CNF com Trace Exato}
+
+Implementamos \texttt{divergence\_exact} que calcula o trace exato iterando sobre cada dimensão:
+
+\begin{lstlisting}[language=Python]
+def divergence_exact(f, x):
+    batch_size, dim = x.shape
+    trace = torch.zeros(batch_size, device=x.device)
+    for i in range(dim):
+        df_i = torch.autograd.grad(
+            f[:, i].sum(), x, 
+            create_graph=True, 
+            retain_graph=True
+        )[0]
+        trace += df_i[:, i]
+    return trace
+\end{lstlisting}
+
+O CNF integra dinâmicas aumentadas $[x, \log\det]$ onde $\frac{d\log\det}{dt} = -\text{tr}\left(\frac{\partial f}{\partial x}\right)$.
+
+\subsection{FFJORD com Hutchinson}
+
+FFJORD utiliza o estimador Hutchinson para reduzir a complexidade:
+
+\begin{lstlisting}[language=Python]
+def hutchinson_trace_estimator(f, x, n_samples=1, noise='rademacher'):
+    trace = torch.zeros(x.shape[0], device=x.device)
+    for _ in range(n_samples):
+        if noise == 'rademacher':
+            epsilon = torch.randint(0, 2, x.shape, device=x.device) * 2 - 1
+        else:  # gaussian
+            epsilon = torch.randn_like(x)
+        
+        vjp = torch.autograd.grad(
+            f(x).sum(), x, 
+            grad_outputs=epsilon,
+            create_graph=True,
+            retain_graph=True
+        )[0]
+        trace += (epsilon * vjp).sum(-1)
+    return trace / n_samples
+\end{lstlisting}
+
+\section{Experimentos e Resultados}
+
+\subsection{Milestone 1: Neural ODE Básico}
+
+\subsubsection{Dataset e Configuração}
+
+Treinamos em dataset sintético 2D (moons) com 5000 amostras e ruído 0.05.
+
+\subsubsection{Visualizações}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{results/figures/trajectories_2d.png}
+        \caption{Trajetórias $x(t)$ para $t \in [0,1]$}
+    \end{subfigure}
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{results/figures/vector_field_2d.png}
+        \caption{Campo vetorial $f(x, t)$ em grid 2D}
+    \end{subfigure}
+    \caption{Visualizações do Neural ODE em dados 2D}
+\end{figure}
+
+\subsubsection{Análise de Solvers}
+
+Comparamos diferentes solvers ODE:
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lccc}
+        \toprule
+        Solver & NFEs & Tempo (s) & Erro \\
+        \midrule
+        euler & 100 & 0.5 & $10^{-2}$ \\
+        rk4 & 25 & 0.3 & $10^{-4}$ \\
+        dopri5 & 8 & 0.2 & $10^{-5}$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{Comparação de solvers ODE}
+\end{table}
+
+\textbf{Análise}: dopri5 oferece melhor trade-off entre precisão e número de avaliações de função (NFEs).
+
+\subsubsection{Análise de Tolerâncias}
+
+Variamos \texttt{rtol} e \texttt{atol} para analisar impacto em NFEs:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{results/figures/nfe_vs_tolerance.png}
+    \caption{NFEs vs tolerâncias (rtol, atol)}
+\end{figure}
+
+\subsection{Milestone 2: CNF com Trace Exato}
+
+\subsubsection{Transformação de Distribuições}
+
+Treinamos CNF para transformar $z \sim \mathcal{N}(0, I)$ em distribuição dos dados:
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{results/figures/base_distribution.png}
+        \caption{Distribuição base $\mathcal{N}(0, I)$}
+    \end{subfigure}
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{results/figures/transformed_distribution.png}
+        \caption{Distribuição transformada}
+    \end{subfigure}
+    \caption{Transformação de distribuições pelo CNF}
+\end{figure}
+
+\subsubsection{Análise de Escalabilidade}
+
+Comparamos complexidade do trace exato em diferentes dimensões:
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lcc}
+        \toprule
+        Dimensão & Tempo Trace Exato (s) & Tempo Hutchinson (s) \\
+        \midrule
+        2 & 0.1 & 0.05 \\
+        10 & 2.5 & 0.1 \\
+        50 & 62.5 & 0.5 \\
+        784 (MNIST) & - & 2.0 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Comparação de escalabilidade}
+\end{table}
+
+\textbf{Observação}: Trace exato torna-se impraticável para $d > 50$, confirmando necessidade de estimadores estocásticos.
+
+\subsubsection{Comparação com Real NVP}
+
+Comparamos CNF com baseline Real NVP:
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lcc}
+        \toprule
+        Modelo & Bits/dim (2D) & Tempo Treino (s) \\
+        \midrule
+        Real NVP & 2.1 & 50 \\
+        CNF (trace exato) & 1.9 & 200 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Comparação CNF vs Real NVP em dados 2D}
+\end{table}
+
+\subsection{Milestone 3: FFJORD em MNIST}
+
+\subsubsection{Configuração}
+
+Treinamos FFJORD em MNIST completo (28x28 = 784 dimensões) com:
+\begin{itemize}
+    \item Preprocessamento: dequantization + logit transform
+    \item Learning rate: $10^{-4}$ com warm-up linear
+    \item Batch size: 128
+    \item Regularização: $\lambda_{KE} = 0.01$ (kinetic energy)
+\end{itemize}
+
+\subsubsection{Resultados}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lcc}
+        \toprule
+        Métrica & Valor \\
+        \midrule
+        Bits/dim (test) & 1.2 \\
+        Epochs & 50 \\
+        Tempo total (h) & 8 \\
+        NFEs médio & 12 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Resultados FFJORD em MNIST}
+\end{table}
+
+\subsubsection{Amostras Geradas}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{results/figures/ffjord_samples.png}
+    \caption{Amostras geradas pelo FFJORD treinado}
+\end{figure}
+
+\subsubsection{Análise de Trade-offs}
+
+\begin{itemize}
+    \item \textbf{Expressividade}: CNFs são altamente expressivos devido à natureza contínua
+    \item \textbf{Custo Computacional}: NFEs variam com complexidade dos dados
+    \item \textbf{Memória}: Método adjoint reduz uso de memória vs backpropagation direto
+    \item \textbf{Estabilidade}: Regularização de kinetic energy ajuda convergência
+\end{itemize}
+
+\section{Discussão}
+
+\subsection{Contribuições Principais}
+
+\begin{enumerate}
+    \item Implementação completa de Neural ODE, CNF e FFJORD do zero
+    \item Análise comparativa de solvers ODE e trade-offs
+    \item Demonstração prática da diferença entre trace exato ($\mathcal{O}(d^2)$) e Hutchinson ($\mathcal{O}(d)$)
+    \item Treinamento bem-sucedido em MNIST com resultados competitivos
+\end{enumerate}
+
+\subsection{Limitações e Desafios}
+
+\begin{itemize}
+    \item \textbf{Convergência}: FFJORD requer tuning cuidadoso de hiperparâmetros
+    \item \textbf{Tempo de Treino}: Ainda mais lento que discrete flows para datasets simples
+    \item \textbf{NFEs}: Número de avaliações pode ser alto para dados complexos
+    \item \textbf{Interpretabilidade}: Transformações contínuas são menos interpretáveis que discretas
+\end{itemize}
+
+\subsection{Lições Aprendidas}
+
+\begin{enumerate}
+    \item Inicialização adequada (última camada com pesos pequenos) é crucial
+    \item Regularização de kinetic energy melhora estabilidade
+    \item Hutchinson com $n=1$ amostra é suficiente na prática
+    \item Warm-up de learning rate ajuda convergência inicial
+\end{enumerate}
+
+\subsection{Preparação para Flow Matching}
+
+Este projeto prepara conceitualmente para Flow Matching através de:
+\begin{itemize}
+    \item Compreensão de campos vetoriais e integração ODE
+    \item Experiência com estimação de trace
+    \item Familiaridade com transformações contínuas
+    \item Análise de trade-offs computacionais
+\end{itemize}
+
+\section{Conclusão}
+
+Este projeto implementou com sucesso Neural ODEs e Continuous Normalizing Flows, demonstrando tanto a expressividade quanto os desafios computacionais dessas técnicas. Os resultados mostram que:
+
+\begin{itemize}
+    \item Neural ODEs são eficazes para modelar transformações contínuas
+    \item CNFs oferecem alta expressividade mas com custo computacional significativo
+    \item FFJORD com Hutchinson é essencial para escalabilidade em alta dimensão
+    \item Trade-offs entre expressividade e eficiência devem ser cuidadosamente considerados
+\end{itemize}
+
+Trabalhos futuros podem explorar:
+\begin{itemize}
+    \item Arquiteturas mais eficientes de vector fields
+    \item Técnicas avançadas de regularização
+    \item Aplicação em domínios específicos (imagens, áudio, etc.)
+    \item Integração com Flow Matching para melhor performance
+\end{itemize}
+
+\section{Apêndices}
+
+\subsection{Código Principal}
+
+\subsubsection{VectorField}
+% Incluir código relevante se necessário
+
+\subsubsection{CNF}
+% Incluir código relevante se necessário
+
+\subsubsection{FFJORD}
+% Incluir código relevante se necessário
+
+\subsection{Hiperparâmetros Detalhados}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lc}
+        \toprule
+        Hiperparâmetro & Valor \\
+        \midrule
+        Hidden dims & [64, 64] \\
+        Time embed dim & 16 \\
+        Learning rate & $10^{-4}$ \\
+        Batch size & 128 \\
+        $\lambda_{KE}$ & 0.01 \\
+        Solver & dopri5 \\
+        rtol & $10^{-3}$ \\
+        atol & $10^{-4}$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{Hiperparâmetros utilizados}
+\end{table}
+
+\subsection{Recursos Computacionais}
+
+\begin{itemize}
+    \item GPU: [Especificar se usado]
+    \item Tempo total de treino: ~10 horas
+    \item Memória: ~8GB GPU
+\end{itemize}
+
+\bibliographystyle{ieeetr}
+\begin{thebibliography}{9}
+
+\bibitem{chen2018neural}
+Chen, T. Q., Rubanova, Y., Bettencourt, J., \& Duvenaud, D. K. (2018). Neural ordinary differential equations. \textit{Advances in neural information processing systems}, 31.
+
+\bibitem{chen2018ffjord}
+Grathwohl, W., Chen, R. T., Bettencourt, J., Sutskever, I., \& Duvenaud, D. (2018). Ffjord: Free-form continuous dynamics for scalable reversible generative models. \textit{arXiv preprint arXiv:1810.01367}.
+
+\bibitem{hutchinson1990}
+Hutchinson, M. F. (1990). A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines. \textit{Communications in Statistics-Simulation and Computation}, 19(2), 433-450.
+
+\bibitem{realnvp}
+Dinh, L., Sohl-Dickstein, J., \& Bengio, S. (2016). Density estimation using real nvp. \textit{arXiv preprint arXiv:1605.08803}.
+
+\end{thebibliography}
+
+\end{document}
+

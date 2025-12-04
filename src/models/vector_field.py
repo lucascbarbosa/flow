@@ -3,7 +3,6 @@ import math
 import torch
 import torch.nn as nn
 
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -37,11 +36,12 @@ class VectorField(nn.Module):
             layers.append(nn.Linear(dims[i], dims[i + 1]).to(device))
             if i < len(dims) - 2:  # No activation on last layer
                 layers.append(nn.SiLU().to(device))
+
         self.net = nn.Sequential(*layers)
 
         # Initialization: last layer with small weights (σ=0.01)
-        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01)
-        nn.init.zeros_(self.net[-1].bias)
+        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01).to(device)
+        nn.init.zeros_(self.net[-1].bias).to(device)
 
     def time_embedding(self, t: torch.Tensor) -> torch.Tensor:
         """Sinusoidal time embedding.
@@ -82,7 +82,7 @@ class VectorField(nn.Module):
             torch.cos(t.unsqueeze(-1) * freqs)
         ], dim=-1)
 
-    def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """Computes f(x, t) = dx/dt."""
         t = t.to(device)
 

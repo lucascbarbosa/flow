@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from src.models.vector_field import VectorField
 from src.utils.trace import divergence_exact
-from torchdiffeq import odeint
+from torchdiffeq import odeint_adjoint
 from torch.distributions import Distribution
 from typing import Literal, Optional, Tuple
 
@@ -17,9 +17,10 @@ class CNF(nn.Module):
         self,
         vector_field: VectorField,
         method: Literal['dopri5', 'euler', 'rk4'] = 'dopri5',
-        rtol: float = 1e-3,
-        atol: float = 1e-4,
-        base_dist: Optional[Distribution] = None
+        rtol: float = 1e-5,
+        atol: float = 1e-5,
+        base_dist: Optional[Distribution] = None,
+        trace_scale: float = 1e-2
     ) -> None:
         """Initialize CNF.
 
@@ -29,44 +30,30 @@ class CNF(nn.Module):
             method (Literal['dopri5', 'euler', 'rk4']): ODE solver method.
                 Default is 'dopri5'.
 
-            rtol (float): Relative tolerance for ODE solver. Default is 1e-3.
+            rtol (float): Relative tolerance for ODE solver. Default is 1e-5.
 
-            atol (float): Absolute tolerance for ODE solver. Default is 1e-4.
+            atol (float): Absolute tolerance for ODE solver. Default is 1e-5.
 
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).
+
+            trace_scale (float): Trace scale factor. Default is 1e-2.
         """
         super().__init__()
         self.vf = vector_field
         self.method = method
         self.rtol = rtol
         self.atol = atol
+        self.trace_scale = trace_scale
         if base_dist is None:
             # Prior: N(0, I)
-            # Store parameters separately so they can be moved to device
             features = vector_field.features
-            self.register_buffer('_base_loc', torch.zeros(features))
-            self.register_buffer('_base_cov', torch.eye(features))
-            self.base_dist = None
+            self.base_dist = torch.distributions.MultivariateNormal(
+                torch.zeros(features, device=device),
+                torch.eye(features, device=device)
+            )
         else:
             self.base_dist = base_dist
-            self._base_loc = None
-            self._base_cov = None
-
-    def _get_base_dist(self, device: torch.device) -> Distribution:
-        """Get base distribution on the specified device.
-
-        Args:
-            device: Device to place distribution on.
-
-        Returns:
-            Base distribution on the specified device.
-        """
-        # Default: N(0, I) on correct device
-        return torch.distributions.MultivariateNormal(
-            self._base_loc.to(device),
-            self._base_cov.to(device)
-        )
 
     def _augmented_dynamics(
         self,
@@ -88,22 +75,23 @@ class CNF(nn.Module):
             torch.Tensor: Derivative with shape (batch, features + 1).
         """
         x = state[:, :-1]  # (batch, features)
-        if not x.requires_grad:
-            # 1. Create a detached leaf that tracks gradients
-            x_detached = x.detach()
-            x_detached.requires_grad_(True)
 
-            # 2. Compute trace within enable_grad context
-            with torch.enable_grad():
-                trace = divergence_exact(lambda x_: self.vf(t, x_), x_detached)
+        x = x.requires_grad_(True)
 
-            # 3. Compute vector field normally
-            dx_dt = self.vf(t, x)
+        # Compute vector field
+        dx_dt = self.vf(t, x)
 
-        else:
-            dx_dt = self.vf(t, x)
-            trace = divergence_exact(lambda x_: self.vf(t, x_), x)
+        # Compute trace of the Jacobian using exact method
+        with torch.enable_grad():
+            trace = divergence_exact(
+                lambda x_: self.vf(t, x_),
+                x,
+            )
 
+        # Apply scale factor
+        trace = trace * self.trace_scale
+
+        # Compute log determinant derivative
         dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
 
         return torch.cat([dx_dt, dlogdet_dt], dim=-1)
@@ -124,19 +112,20 @@ class CNF(nn.Module):
 
         log_det_init = torch.zeros(
             x.shape[0], 1,
-            device=x.device,
+            device=device,
             dtype=x.dtype,
         )
         state_init = torch.cat([x, log_det_init], dim=-1)
 
         # Integrate ODE forward
-        state_t = odeint(
+        state_t = odeint_adjoint(
             self._augmented_dynamics,
             state_init,
             t_span,
             method=self.method,
             rtol=self.rtol,
-            atol=self.atol
+            atol=self.atol,
+            adjoint_params=tuple(self.vf.parameters())
         )
 
         # Final state
@@ -161,8 +150,7 @@ class CNF(nn.Module):
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
-        base_dist = self._get_base_dist(z.device)
-        log_prob_z = base_dist.log_prob(z)
+        log_prob_z = self.base_dist.log_prob(z)
         log_prob_x = log_prob_z + log_det
         return log_prob_x
 
