@@ -58,16 +58,16 @@ def train_neural_ode(
             backward_x_t = backward_x_t.permute(1, 2, 0)
 
             # Sample n_samples random time points for each trajectory in batch
-            time_indices = torch.randint(
-                0, n_steps,
-                (batch_size, n_samples),
-                device=x0_target.device
-            )
-            # time_indices = torch.linspace(
-            #     0, n_steps - 1, n_samples,
-            #     dtype=torch.long,
+            # time_indices = torch.randint(
+            #     0, n_steps,
+            #     (batch_size, n_samples),
             #     device=x0_target.device
-            # ).unsqueeze(0).expand(batch_size, n_samples)
+            # )
+            time_indices = torch.linspace(
+                0, n_steps - 1, n_samples,
+                dtype=torch.long,
+                device=x0_target.device
+            ).unsqueeze(0).expand(batch_size, n_samples)
 
             # Use advanced indexing to sample from each trajectory
             batch_indices = torch.arange(
