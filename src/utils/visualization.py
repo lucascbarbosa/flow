@@ -268,7 +268,7 @@ class Synthetic2DViz:
             # Convert to tensor
             grid_points = torch.tensor(
                 np.stack([X.ravel(), Y.ravel()], axis=1),
-                dtype=torch.float64,
+                dtype=torch.float32,
                 device=device
             )
 
@@ -345,7 +345,12 @@ class Synthetic2DViz:
         # Handle RealNVP separately
         if isinstance(model, RealNVP):
             return cls._plot_transformation_realnvp(
-                model, n_samples, xlim, ylim, axes, save_path
+                model,
+                n_samples,
+                xlim,
+                ylim,
+                (ax_left, ax_right),
+                save_path
             )
 
         # At this point, model is NeuralODE or CNF

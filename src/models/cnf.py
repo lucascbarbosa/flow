@@ -59,15 +59,6 @@ class CNF(nn.Module):
 
         dx/dt = f(x, t)
         d(log_det)/dt = -trace(∂f/∂x)
-
-        Args:
-            t (torch.Tensor): Scalar time.
-
-            state (torch.Tensor): State tensor with shape (batch, features + 1)
-                containing [x, log_det].
-
-        Returns:
-            torch.Tensor: Derivative with shape (batch, features + 1).
         """
         x = state[:, :-1]  # (batch, features)
 
@@ -115,7 +106,7 @@ class CNF(nn.Module):
         state_init = torch.cat([x, log_det_init], dim=-1)
 
         # Integrate ODE forward
-        state_t = odeint_adjoint(
+        state_final = odeint_adjoint(
             self._augmented_dynamics,
             state_init,
             t_span,
@@ -123,10 +114,9 @@ class CNF(nn.Module):
             rtol=self.rtol,
             atol=self.atol,
             adjoint_params=tuple(self.vf.parameters())
-        )
+        )[-1]
 
         # Final state
-        state_final = state_t[-1]  # (batch, features + 1)
         z = state_final[:, :-1]  # (batch, features)
         log_det = state_final[:, -1]  # (batch,)
 
