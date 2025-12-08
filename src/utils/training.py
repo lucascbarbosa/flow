@@ -231,13 +231,13 @@ def train_ffjord(
         total_ke = 0.0
         n_batches = 0
 
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
-            x = batch[0].to(device)
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
+            x0 = x0.to(device)
 
             optimizer.zero_grad()
 
             # Calculate log-likelihood
-            log_prob = model.log_prob(x)
+            log_prob = model.log_prob(x0)
             nll = -log_prob.mean()
 
             # Optional: Kinetic energy regularization
@@ -245,11 +245,11 @@ def train_ffjord(
             ke_loss = 0.0
             if lambda_ke > 0:
                 # Sample random time points
-                t = torch.rand(x.shape[0], device=device)
-                x_requires_grad = x.requires_grad_(True)
+                t = torch.rand(x0.shape[0], device=device)
+                x0_requires_grad = x0.requires_grad_(True)
 
                 # Compute vector field
-                dx_dt = model.vf(t, x_requires_grad)
+                dx_dt = model.vf(t, x0_requires_grad)
 
                 # Kinetic energy: 0.5 * ||dx_dt||^2
                 ke_loss = 0.5 * (dx_dt ** 2).sum(dim=-1).mean()
