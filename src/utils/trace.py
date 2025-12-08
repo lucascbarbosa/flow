@@ -52,47 +52,6 @@ def divergence_exact(
     return trace
 
 
-def divergence(
-    f: Callable[[torch.Tensor], torch.Tensor],
-    x: torch.Tensor,
-    method: Literal['exact', 'hutchinson', 'auto'] = 'auto',
-    num_samples: int = 1,
-    distribution: Literal['rademacher', 'gaussian'] = 'rademacher',
-    exact_threshold: int = 50
-) -> torch.Tensor:
-    """Calculate trace(∂f/∂x) with automatic method selection.
-
-    Automatically chooses between exact and Hutchinson estimator based on
-    input dimension. For dimensions <= exact_threshold, uses exact method.
-    For higher dimensions, uses Hutchinson estimator for better performance.
-
-    Args:
-        f: Function R^d -> R^d (callable that accepts x and returns
-            (batch, d)).
-        x: Input tensor with shape (batch, d).
-        method: 'exact', 'hutchinson', or 'auto' (default: 'auto').
-        num_samples: Number of samples for Hutchinson estimator (default: 1).
-        distribution: 'rademacher' or 'gaussian' for Hutchinson.
-        exact_threshold: Dimension threshold for automatic method selection
-            (default: 50).
-
-    Returns:
-        trace: Trace of the Jacobian with shape (batch,).
-    """
-    _, dim = x.shape
-
-    if method == 'auto':
-        if dim <= exact_threshold:
-            method = 'exact'
-        else:
-            method = 'hutchinson'
-
-    if method == 'exact':
-        return divergence_exact(f, x)
-    elif method == 'hutchinson':
-        return divergence_hutchinson(f, x, num_samples, distribution)
-
-
 def divergence_hutchinson(
     f: Callable[[torch.Tensor], torch.Tensor],
     x: torch.Tensor,
@@ -163,3 +122,44 @@ def divergence_hutchinson(
     trace = torch.stack(trace_estimates, dim=0).mean(dim=0)  # (batch,)
 
     return trace
+
+
+def divergence(
+    f: Callable[[torch.Tensor], torch.Tensor],
+    x: torch.Tensor,
+    method: Literal['exact', 'hutchinson', 'auto'] = 'auto',
+    num_samples: int = 1,
+    distribution: Literal['rademacher', 'gaussian'] = 'rademacher',
+    exact_threshold: int = 50
+) -> torch.Tensor:
+    """Calculate trace(∂f/∂x) with automatic method selection.
+
+    Automatically chooses between exact and Hutchinson estimator based on
+    input dimension. For dimensions <= exact_threshold, uses exact method.
+    For higher dimensions, uses Hutchinson estimator for better performance.
+
+    Args:
+        f: Function R^d -> R^d (callable that accepts x and returns
+            (batch, d)).
+        x: Input tensor with shape (batch, d).
+        method: 'exact', 'hutchinson', or 'auto' (default: 'auto').
+        num_samples: Number of samples for Hutchinson estimator (default: 1).
+        distribution: 'rademacher' or 'gaussian' for Hutchinson.
+        exact_threshold: Dimension threshold for automatic method selection
+            (default: 50).
+
+    Returns:
+        trace: Trace of the Jacobian with shape (batch,).
+    """
+    _, dim = x.shape
+
+    if method == 'auto':
+        if dim <= exact_threshold:
+            method = 'exact'
+        else:
+            method = 'hutchinson'
+
+    if method == 'exact':
+        return divergence_exact(f, x)
+    elif method == 'hutchinson':
+        return divergence_hutchinson(f, x, num_samples, distribution)
