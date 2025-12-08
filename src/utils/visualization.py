@@ -6,7 +6,7 @@ import torch
 from matplotlib.axes import Axes
 from matplotlib.patches import Circle
 from src.models.neural_ode import NeuralODE
-from src.models.vector_field import VectorField
+from src.models.vector_field import VectorField2D
 from src.models.cnf import CNF
 from typing import Optional, Tuple, Union
 from zuko.flows import RealNVP
@@ -145,8 +145,8 @@ class Synthetic2DViz:
         """Plot vector field f(x, t) on a 2D grid.
 
         Args:
-            model (Union[VectorField, NeuralODE, CNF, RealNVP]): Model.
-                VectorField, NeuralODE, or CNF for ODE-based models.
+            model (Union[VectorField2D, NeuralODE, CNF, RealNVP]): Model.
+                VectorField2D, NeuralODE, or CNF for ODE-based models.
                 RealNVP for flow-based models.
 
             xlim (Tuple[float, float]): Limits in x direction.
@@ -178,8 +178,8 @@ class Synthetic2DViz:
             )
 
         # Get vector field from model once
-        # At this point, model is VectorField, NeuralODE, or CNF
-        vf = model if isinstance(model, VectorField) else model.vf
+        # At this point, model is VectorField2D, NeuralODE, or CNF
+        vf = model if isinstance(model, VectorField2D) else model.vf
 
         # Convert t to tensor and extract scalar value for title
         t_value = float(t)
@@ -635,7 +635,7 @@ class MNISTViz:
     @classmethod
     def plot_trajectories(
         cls,
-        model: Union[NeuralODE, CNF, VectorField],
+        model: Union[NeuralODE, CNF, VectorField2D],
         dataset,
         n_samples: int = 20,
         n_steps: int = 100,
@@ -650,7 +650,7 @@ class MNISTViz:
         - Right: Final state x(1) projected to 2D with label colors
 
         Args:
-            model (Union[NeuralODE, CNF, VectorField]): Model. NeuralODE or CNF
+            model (Union[NeuralODE, CNF, VectorField2D]): Model. NeuralODE or CNF
                 for trajectory integration.
 
             dataset: Dataset with .data attribute. Labels optional.
@@ -688,10 +688,10 @@ class MNISTViz:
         indices = torch.randperm(n_total)[:n_plot]
 
         # Get device and determine model type once
-        if isinstance(model, VectorField):
+        if isinstance(model, VectorField2D):
             raise ValueError(
                 "plot_trajectories requires NeuralODE or CNF model. "
-                "VectorField alone cannot integrate trajectories."
+                "VectorField2D alone cannot integrate trajectories."
             )
         # At this point, model is NeuralODE or CNF
         device = next(model.vf.parameters()).device
@@ -772,7 +772,7 @@ class MNISTViz:
     @classmethod
     def plot_vector_field(
         cls,
-        model: Union[VectorField, NeuralODE, CNF, RealNVP],
+        model: Union[VectorField2D, NeuralODE, CNF, RealNVP],
         data_sample: Optional[torch.Tensor] = None,
         n_grid: int = 20,
         t: float = 0.5,
@@ -788,7 +788,7 @@ class MNISTViz:
         using PCA fitted on a data sample.
 
         Args:
-            model (Union[VectorField, NeuralODE, CNF, RealNVP]): Model.
+            model (Union[VectorField2D, NeuralODE, CNF, RealNVP]): Model.
 
             data_sample (torch.Tensor, optional): Sample data to fit PCA.
                 If None and PCA not fitted, raises error. Shape should be
@@ -837,8 +837,8 @@ class MNISTViz:
             )
 
         # Get vector field from model once
-        # At this point, model is VectorField, NeuralODE, or CNF
-        vf = model if isinstance(model, VectorField) else model.vf
+        # At this point, model is VectorField2D, NeuralODE, or CNF
+        vf = model if isinstance(model, VectorField2D) else model.vf
         device = next(vf.parameters()).device
 
         # Determine grid limits

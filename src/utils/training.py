@@ -165,14 +165,11 @@ def train_realnvp(
         total_loss = 0.0
         n_batches = 0
 
-        for batch in tqdm(
+        for x0 in tqdm(
             dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"
         ):
             # Extract data from batch (handle both single-tensor and tuple)
-            if isinstance(batch, (list, tuple)):
-                x = batch[0].to(device)
-            else:
-                x = batch.to(device)
+            x = x0.to(device).to(torch.float32)
 
             # RealNVP models in this codebase don't use context, pass None
             optimizer.zero_grad()
@@ -291,7 +288,7 @@ def train_ffjord(
             )
 
 
-class CountingVectorField(nn.Module):
+class CountingVectorField2D(nn.Module):
     """Wrapper module that counts function evaluations."""
     def __init__(self, vf: nn.Module):
         """."""
@@ -312,7 +309,7 @@ def count_nfe(
 ) -> int:
     """Count number of function evaluations (NFEs) during integration."""
     # Create counting wrapper module
-    counting_vf = CountingVectorField(model.vf)
+    counting_vf = CountingVectorField2D(model.vf)
 
     # Temporarily replace the vector field
     original_vf = model.vf

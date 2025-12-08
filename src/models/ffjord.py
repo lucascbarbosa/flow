@@ -1,7 +1,7 @@
 """FFJORD implementation."""
 import torch
 import torch.nn as nn
-from src.models.vector_field import VectorField
+from src.models.vector_field import VectorField2D
 from src.utils.trace import divergence_hutchinson
 from torchdiffeq import odeint_adjoint
 from torch.distributions import Distribution
@@ -14,7 +14,7 @@ class FFJORD(nn.Module):
     """Continuous Normalizing Flow with Hutchinson trace estimator."""
     def __init__(
         self,
-        vector_field: VectorField,
+        vector_field: VectorField2D,
         base_dist: Optional[Distribution] = None,
         num_samples: int = 1,
         distribution: Literal['rademacher', 'gaussian'] = 'rademacher'
@@ -22,7 +22,7 @@ class FFJORD(nn.Module):
         """Initialize FFJORD.
 
         Args:
-            vector_field (VectorField): Vector field module f(x, t).
+            vector_field (VectorField2D): Vector field module f(x, t).
 
             base_dist (Distribution, optional): Base distribution.
                 If None, uses N(0, I).

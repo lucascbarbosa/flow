@@ -28,7 +28,7 @@ mini-project-1/
 ├── requirements.txt
 ├── src/
 │   ├── models/
-│   │   ├── vector_field.py      # VectorField architectures
+│   │   ├── vector_field.py      # VectorField2D architectures
 │   │   ├── neural_ode.py        # Neural ODE básico
 │   │   ├── cnf.py               # CNF com trace exato
 │   │   └── ffjord.py            # FFJORD com Hutchinson
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 ## Milestones
 
 ### Milestone 1: Neural ODE Básico (Semana 1)
-- Implementar VectorField e NeuralODE
+- Implementar VectorField2D e NeuralODE
 - Treinar em dataset 2D sintético
 - Visualizar trajetórias e vector fields
 - Analisar NFEs e comparar solvers

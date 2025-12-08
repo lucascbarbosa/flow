@@ -2,7 +2,7 @@
 import torch
 import torch.optim as optim
 from ..models.cnf import CNF
-from ..models.vector_field import VectorField
+from ..models.vector_field import VectorField2D
 from ..utils.datasets import Synthetic2D, get_dataloader
 from ..utils.training import count_nfe
 from torch.utils.data import DataLoader
@@ -11,7 +11,7 @@ from typing import Dict
 
 
 def compute_regularizations(
-    vf: VectorField,
+    vf: VectorField2D,
     x: torch.Tensor,
     t: torch.Tensor
 ) -> Dict[str, torch.Tensor]:
@@ -158,7 +158,7 @@ def compare_regularizations():
         print(f"\n=== Testando {config_name} ===")
 
         # Modelo
-        vf = VectorField(
+        vf = VectorField2D(
             features=2, hidden_dims=[64, 64], time_embed_dim=16
         )
         model = CNF(vf).to(device)

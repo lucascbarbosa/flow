@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torchdiffeq import odeint
-from src.models.vector_field import VectorField
+from src.models.vector_field import VectorField2D
 from typing import Literal
 
 
@@ -13,7 +13,7 @@ class NeuralODE(nn.Module):
     """Neural ODE: integrates dx/dt = f(x,t) from t=0 to t=1."""
     def __init__(
         self,
-        vector_field: VectorField,
+        vector_field: VectorField2D,
         solver: Literal['euler', 'rk4', 'dopri5'] = 'dopri5',
         rtol: float = 1e-3,
         atol: float = 1e-4,

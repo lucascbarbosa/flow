@@ -158,7 +158,7 @@ O projeto segue a seguinte estrutura:
 mini-project-1/
 ├── src/
 │   ├── models/
-│   │   ├── vector_field.py      # Arquiteturas VectorField
+│   │   ├── vector_field.py      # Arquiteturas VectorField2D
 │   │   ├── neural_ode.py        # Neural ODE básico
 │   │   ├── cnf.py               # CNF com trace exato
 │   │   └── ffjord.py            # FFJORD com Hutchinson
@@ -182,7 +182,7 @@ mini-project-1/
 
 \subsection{Vector Field}
 
-O \texttt{VectorField} parametriza $\frac{dx}{dt} = f(x, t)$ usando uma rede neural. Implementamos:
+O \texttt{VectorField2D} parametriza $\frac{dx}{dt} = f(x, t)$ usando uma rede neural. Implementamos:
 
 \begin{itemize}
     \item \textbf{Time Embedding}: Codificação senoidal do tempo
@@ -455,7 +455,7 @@ Trabalhos futuros podem explorar:
 
 \subsection{Código Principal}
 
-\subsubsection{VectorField}
+\subsubsection{VectorField2D}
 % Incluir código relevante se necessário
 
 \subsubsection{CNF}

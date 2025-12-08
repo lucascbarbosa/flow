@@ -2,7 +2,7 @@
 import torch
 import torch.optim as optim
 from src.models.neural_ode import NeuralODE
-from src.models.vector_field import VectorField
+from src.models.vector_field import VectorField2D
 from src.utils.datasets import Synthetic2D, get_dataloader
 from src.utils.training import train_neural_ode, count_nfe
 
@@ -40,7 +40,7 @@ def compare_solvers():
         print(f"\n=== Testando solver: {solver_key} ===")
 
         # Modelo (moons dataset has 2 classes)
-        vf = VectorField(features=2, hidden_dims=[64, 64], time_embed_dim=16)
+        vf = VectorField2D(features=2, hidden_dims=[64, 64], time_embed_dim=16)
         model = NeuralODE(
             vf,
             solver=method,
