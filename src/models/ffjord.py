@@ -93,32 +93,28 @@ class FFJORD(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        t_span: torch.Tensor | None = None,
-        reverse: bool = False
+        n_steps: int = 10,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Transform x -> z (forward) or z -> x (reverse) using augmented ODE.
+        """Transform x -> z (forward) by integrating from t=0 to t=1.
 
         Args:
             x (torch.Tensor): Input tensor with shape (batch, features).
-            t_span (torch.Tensor): Time points to evaluate.
-            reverse (bool): If True, integrates from t=1 to t=0 (z -> x).
+            n_steps (int): Number of time steps. Default is 10.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: Tuple containing:
                 - z (torch.Tensor): Transformed tensor with shape
                     (batch, features).
                 - log_det (torch.Tensor): Log determinant with shape
-                    (batch, 1).
+                    (batch,).
         """
-        if t_span is None:
-            if reverse:
-                # z -> x: integrate from t=1 to t=0
-                t_span = torch.tensor([1., 0.], device=device, dtype=torch.float64)
-            else:
-                # x -> z: integrate from t=0 to t=1
-                t_span = torch.tensor([0., 1.], device=device, dtype=torch.float64)
-        else:
-            t_span = t_span.to(device)
+        # x -> z: integrate from t=0 to t=1
+        t_span = torch.linspace(
+            0., 1.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
 
         # Ensure x is 2D: [batch, features]
         if x.dim() == 1:
@@ -131,7 +127,8 @@ class FFJORD(nn.Module):
 
         # Initial state: [x, log_det=0]
         # log_det_init should also require grad to maintain gradient flow
-        # even though it starts at 0, it will accumulate gradients during ODE integration
+        # even though it starts at 0, it will accumulate gradients
+        # during ODE integration
         log_det_init = torch.zeros(
             x.shape[0],
             1,
@@ -159,11 +156,75 @@ class FFJORD(nn.Module):
 
         return z, log_det
 
-    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+    def backward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 10,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Transform z -> x (backward) by integrating from t=1 to t=0.
+
+        Args:
+            x (torch.Tensor): Input tensor with shape (batch, features).
+            n_steps (int): Number of time steps. Default is 10.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Tuple containing:
+                - x_transformed (torch.Tensor): Transformed tensor with shape
+                    (batch, features).
+                - log_det (torch.Tensor): Log determinant with shape
+                    (batch,).
+        """
+        # z -> x: integrate from t=1 to t=0
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+
+        # Ensure x is 2D: [batch, features]
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
+        # Ensure x requires grad for proper gradient tracking through ODE
+        if torch.is_grad_enabled():
+            if not x.requires_grad:
+                x = x.clone().requires_grad_(True)
+
+        # Initial state: [x, log_det=0]
+        log_det_init = torch.zeros(
+            x.shape[0],
+            1,
+            device=device,
+            dtype=torch.float64,
+            requires_grad=False
+        )
+        state_init = torch.cat([x, log_det_init], dim=-1)
+
+        # Integrate augmented ODE
+        state_t = odeint_adjoint(
+            self._augmented_dynamics,
+            state_init,
+            t_span,
+            method='dopri5',
+            rtol=1e-3,
+            atol=1e-4,
+            adjoint_params=tuple(self.vf.parameters())
+        )
+
+        # Final state
+        state_final = state_t[-1]  # (batch, features + 1)
+        x_transformed = state_final[:, :-1]  # (batch, features)
+        log_det = state_final[:, -1]  # (batch,)
+
+        return x_transformed, log_det
+
+    def log_prob(self, x: torch.Tensor, n_steps: int = 10) -> torch.Tensor:
         """Calculate log p(x) using change of variables.
 
         Args:
             x (torch.Tensor): Input tensor with shape (batch, features).
+            n_steps (int): Number of time steps. Default is 10.
 
         Returns:
             torch.Tensor: Log probability with shape (batch,).
@@ -173,7 +234,7 @@ class FFJORD(nn.Module):
             x = x.clone().requires_grad_(True)
 
         # Transform x -> z
-        z, log_det = self.forward(x, reverse=False)
+        z, log_det = self.forward(x, n_steps=n_steps)
 
         # log p(x) = log p(z) + log |det(∂z/∂x)|
         log_prob_z = self.base_dist.log_prob(z)
@@ -181,11 +242,12 @@ class FFJORD(nn.Module):
 
         return log_prob_x
 
-    def sample(self, num_samples: int) -> torch.Tensor:
+    def sample(self, num_samples: int, n_steps: int = 10) -> torch.Tensor:
         """Generate samples x ~ p(x) via z ~ p(z) -> x.
 
         Args:
             num_samples (int): Number of samples to generate.
+            n_steps (int): Number of time steps. Default is 10.
 
         Returns:
             torch.Tensor: Samples with shape (num_samples, features).
@@ -193,7 +255,7 @@ class FFJORD(nn.Module):
         # Sample z ~ p(z)
         z = self.base_dist.sample((num_samples,))
 
-        # Transform z -> x
-        x, _ = self.forward(z, reverse=True)
+        # Transform z -> x using backward
+        x, _ = self.backward(z, n_steps=n_steps)
 
         return x

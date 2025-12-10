@@ -5,7 +5,7 @@ from src.models.vector_field import VectorField2D
 from src.utils.trace import divergence_exact
 from torchdiffeq import odeint_adjoint
 from torch.distributions import Distribution
-from typing import Literal, Optional, Tuple
+from typing import Optional, Tuple
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -79,7 +79,7 @@ class CNF(nn.Module):
         x: torch.Tensor,
         n_steps: int = 10,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Transform x -> z (forward) or z -> x (reverse)."""
+        """Transform x -> z (forward) by integrating from t=0 to t=1."""
         t_span = torch.linspace(
             0., 1.,
             n_steps,
@@ -111,6 +111,43 @@ class CNF(nn.Module):
 
         return z, log_det
 
+    def backward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 10,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Transform z -> x (backward) by integrating from t=1 to t=0."""
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+
+        log_det_init = torch.zeros(
+            x.shape[0], 1,
+            device=device,
+            dtype=torch.float64,
+        )
+        state_init = torch.cat([x, log_det_init], dim=-1)
+
+        # Integrate ODE backward
+        state_final = odeint_adjoint(
+            self._augmented_dynamics,
+            state_init,
+            t_span,
+            method='dopri5',
+            rtol=1e-3,
+            atol=1e-4,
+            adjoint_params=tuple(self.vf.parameters())
+        )[-1]
+
+        # Final state
+        x_transformed = state_final[:, :-1]  # (batch, features)
+        log_det = state_final[:, -1]  # (batch,)
+
+        return x_transformed, log_det
+
     def log_prob(
         self,
         x: torch.Tensor,
@@ -135,24 +172,9 @@ class CNF(nn.Module):
         n_steps: int = 10,
     ) -> torch.Tensor:
         """Generate samples x ~ p(x) via z ~ p(z) -> x."""
-        t_span = torch.linspace(
-            1., 0.,
-            n_steps,
-            device=device,
-            dtype=torch.float64,
-        )
-
         # Sample z ~ p(z)
         z = self.base_dist.sample((num_samples,)).to(device)
 
-        # Transform z -> x
-        x_t = odeint_adjoint(
-            self.vf,
-            z,
-            t_span,
-            method='dopri5',
-            rtol=1e-3,
-            atol=1e-4,
-            adjoint_params=tuple(self.vf.parameters())
-        )
-        return x_t[-1]
+        # Transform z -> x using backward
+        x, _ = self.backward(z, n_steps)
+        return x
