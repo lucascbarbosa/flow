@@ -142,13 +142,9 @@ def compare_regularizations():
     # Configurações de regularização para comparar
     # (lambda_ke, lambda_jf)
     regularization_configs = [
-        (0.0, 0.0),      # Sem regularização (baseline)
         (0.01, 0.0),     # Apenas Kinetic Energy
         (0.0, 0.01),     # Apenas Jacobian Frobenius
         (0.01, 0.01),    # Ambas regularizações
-        (0.1, 0.0),      # KE mais forte
-        (0.0, 0.1),      # JF mais forte
-        (0.1, 0.1),     # Ambas mais fortes
     ]
 
     results = {}

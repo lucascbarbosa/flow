@@ -22,7 +22,7 @@
 \usepackage{listings}
 \usepackage{xcolor} % Para cores na sintaxe
 \usepackage[brazil]{babel}
-
+\usepackage{float}
 \lstdefinestyle{mystyle}{
     backgroundcolor=\color{lightgray!20}, % Cor de fundo suave
     commentstyle=\color{green!70!black},
@@ -828,6 +828,7 @@ def train_cnf(
 
 A função de perda utilizada é a negative log-likelihood (NLL), que maximiza a probabilidade dos dados observados sob o modelo. O cálculo exato de trace tem complexidade $\mathcal{O}(d^2)$, tornando-o viável apenas para dimensões baixas ou intermediárias (até aproximadamente 100 dimensões). Para dimensões maiores, é necessário utilizar o estimador Hutchinson, implementado na Milestone 3 com FFJORD.
 
+Além disso, 
 \subsection{Milestone 3}
 Nessa milestone, foi implementado o \texttt{FFJORD} (Free-form Continuous Dynamics) para modelagem generativa no dataset MNIST completo (784 dimensões). O FFJORD estende o CNF utilizando o estimador Hutchinson para calcular o trace da matriz Jacobiana, reduzindo a complexidade computacional de $\mathcal{O}(d^2)$ para $\mathcal{O}(d)$, tornando-o viável para dados de alta dimensionalidade.
 
@@ -903,42 +904,7 @@ O modelo \texttt{FFJORD} é idêntico ao CNF em estrutura, diferindo apenas na f
 
 \section{Resultados e Discussão}
 \subsection{Milestone 1}
-O modelo NeuralODE foi treinado no dataset 2D e os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana. O setup do experimento envolve a criação do dataset, modelo e otimizador, como descrito no Código~\ref{code:milestone1_setup}:
-\begin{lstlisting}[language=Python, caption=Setup do experimento Milestone 1, label=code:milestone1_setup]
-# Dataset
-dataset = Synthetic2D(
-    n_samples=5000,
-    noise=0.05,
-    dataset_type='moons'
-)
-dataloader = get_dataloader(dataset, batch_size=128, shuffle=True)
-
-# Model
-vector_field = VectorField2D(
-    features=2,
-    hidden_dims=[64, 64],
-    time_embed_dim=16
-)
-model = NeuralODE(
-    vector_field=vector_field,
-    solver='dopri5',
-    rtol=1e-5,
-    atol=1e-5
-)
-
-# Optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-# Training
-train_neural_ode(
-    model=model,
-    dataloader=dataloader,
-    optimizer=optimizer,
-    n_epochs=200,
-    n_steps=20,
-    n_samples=10
-)
-\end{lstlisting}
+O modelo NeuralODE foi treinado no dataset 2D e os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana.
 
 \subsubsection{Trajetórias Contínuas: $x \to z$}
 A Figura~\ref{fig:milestone1_trajectories} ilustra as trajetórias contínuas aprendidas pelo modelo. Cada linha representa o caminho percorrido por um ponto de dados ao longo da integração ODE de $t=0$ até $t=1$. É possível notar que, para todas as três distribuições,
@@ -946,9 +912,9 @@ o modelo quase consegue mapear os dados para a gaussiana, porém é limitado pel
 
 \begin{figure}[hbt!]
     \centering
-    \includegraphics[width=0.5\textwidth]{imgs/01_moons_neuralode_trajectories.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_circles_neuralode_trajectories.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_spirals_neuralode_trajectories.png}
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_trajectories.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_trajectories.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_trajectories.png}
     \caption{Trajetórias contínuas aprendidas pelo modelo para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
     \label{fig:milestone1_trajectories}
 \end{figure}
@@ -960,28 +926,122 @@ Além disso, para a distribuição \texttt{moons}, o modelo é capaz de deslocar
 
 \begin{figure}[hbt!]
     \centering
-    \includegraphics[width=0.5\textwidth]{imgs/01_moons_neuralode_vector_fields.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_circles_neuralode_vector_fields.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_spirals_neuralode_vector_fields.png}
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_vector_fields.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_vector_fields.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_vector_fields.png}
     \caption{Campo vetorial $f(x, t)$ aprendido pelo modelo em um grid 2D para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
     \label{fig:milestone1_vectorfield}
 \end{figure}
 
-\subsubsection{Tranformação: $z \sim N(0,I) \to x = \phi(z,1)$}
+\subsubsection{Tranformação: $z \sim N(0,I) \to x = \phi(z,1)$}\label{sec:transformations}
 A Figura~\ref{fig:milestone1_transformation} apresenta a transformação aprendida pelo modelo para os 3 datasets 2D. Observa-se que para os datasets \texttt{moons} o modelo quase consegue mapear efetivamente os dados para uma distribuição mais próxima de uma Gaussiana, mantendo a estrutura geral dos dados enquanto suaviza as transições.
 
 \begin{figure}[hbt!]
     \centering
-    \includegraphics[width=0.5\textwidth]{imgs/01_moons_neuralode_transformation.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_circles_neuralode_transformation.png}
-    \includegraphics[width=0.5\textwidth]{imgs/01_spirals_neuralode_transformation.png}
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_transformation.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_transformation.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_transformation.png}
     \caption{Transformação aprendida pelo NeuralODE de $x(0)$ (esquerda) para $x(1)$ (direita) para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
     \label{fig:milestone1_transformation}
 \end{figure}
 
 \newpage
-\subsubsection{Experimento 1: Análise de NFEs}
-A Tabela \ref{tab:milestone1_exp} descreve as diferentes configurações de solvers e tolerâncias usadas e suas respectivas métricas:
+
+\subsection{Milestone 2}
+O modelo CNF foi treinado em dois datasets diferentes: 2D para as três distribuições e o dataset MNIST reduzido (100 dimensões após PCA) e os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana base. A Tabela~\ref{tab:milestone2_results} compara algumas métricas para os diferentes modelos e datasets.
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cc|cccc}
+            \hline
+            Dataset & Modelo & NFEs & Tempo & Tempo de amostragem & Log-likelihood \\
+            &&& por época (s) & de 1000 amostras (ms) & média \\
+            \hline
+            Moons & CNF & 40 & 19.61 & 36 & -1.1067 \\ 
+            Moons & RealNVP & - & 0.28 & 48 & -0.5785 \\ 
+            Circles & CNF & 40 & 14.76 & 28.4 & -1.625 \\ 
+            Circles & RealNVP & - & 0.29 & 1.6 & -1.1343 \\ 
+            Spirals & CNF & 40 & 19.8 & 54.1 & -1.3429 \\ 
+            Spirals & RealNVP & - & 0.43 & 1.3 & -0.6413 \\ 
+            \hline
+        \end{tabular}
+    }
+    \caption{Comparação de performance entre os modelos CNF e RealNVP para as três distribuições do dataset 2D e o dataset MNIST Reduzido.}
+    \label{tab:milestone2_results}
+\end{table}
+
+As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:spirals_comparison} ilustram a mesma transformação contida na seção \ref{sec:transformations} para as três distribuições 2D (moons, circles, spirals) e os dois modelos (CNF e RealNVP). Cada figura mostra a comparação entre os dois modelos para um dataset específico.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_moons_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:moons_cnf}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_moons_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:moons_realnvp}
+    \end{subfigure}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{moons}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:moons_comparison}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_circles_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:circles_cnf}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_circles_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:circles_realnvp}
+    \end{subfigure}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{circles}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:circles_comparison}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_spirals_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:spirals_cnf}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_spirals_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:spirals_realnvp}
+    \end{subfigure}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{spirals}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:spirals_comparison}
+\end{figure}
+
+\subsection{Milestone 3}
+Nesse milestone, utiliza-se o dataset MNIST completo e o traço estimado de Hutchinson no modelo FFJORD.
+
+
+
+\section{Experimentos}
+\subsection{Análise de NFEs}
+A Tabela \ref{tab:exp1_results} descreve as diferentes configurações de solvers e tolerâncias usadas e suas respectivas métricas. O modelo utilizado é o \texttt{NeuralODE} cujos pesos são carregados dos checkpoints para cada distriubição. É possível notar que, como era esperado, o método dopri5 com as menores tolerâncias são os que geram os maiores NFEs. No entanto, o método que gera o maior tempo computacional em ambos os apssos é o rk4.
 
 \begin{table}[hbt!]
     \centering
@@ -1009,170 +1069,9 @@ A Tabela \ref{tab:milestone1_exp} descreve as diferentes configurações de solv
         spirals & dopri5 & 1e{-5} & 1e{-6} & 74 & 39.4 & 34.4 \\
         \hline
     \end{tabular}
-    \caption{Experimento 1: Configurações entre solvers e tolerâncias.}
-    \label{tab:milestone1_exp}
+    \caption{Experimento 1: Configurações entre solvers e tolerâncias e as respectivas métricas.}
+    \label{tab:exp1_results}
 \end{table}
-
-\subsection{Milestone 2}
-O modelo CNF foi treinado em dois datasets: dataset 2D sintético e MNIST reduzido (100 dimensões após PCA). Os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana base. Os setups dos experimentos envolvem a criação dos datasets, modelos e otimizadores, como descrito nos Códigos~\ref{code:milestone2_setup_2d} e~\ref{code:milestone2_setup_mnist}:
-
-\begin{lstlisting}[language=Python, caption=Setup do experimento Milestone 2 - Dataset 2D, label=code:milestone2_setup_2d]
-# Dataset 2D
-dataset_2d = Synthetic2D(
-    n_samples=5000,
-    noise=0.05,
-    dataset_type='moons'
-)
-dataloader_2d = get_dataloader(dataset_2d, batch_size=128, shuffle=True)
-
-# Model
-vf_2d = VectorField2D(
-    features=2,
-    hidden_dims=[64, 64],
-    time_embed_dim=16
-)
-cnf_2d = CNF(vf_2d, trace_scale=0.75).to(device)
-
-# Optimizer
-optimizer_2d = optim.Adam(cnf_2d.parameters(), lr=1e-2)
-
-# Training
-train_cnf(cnf_2d, dataloader_2d, optimizer_2d, n_epochs=100)
-\end{lstlisting}
-
-\begin{lstlisting}[language=Python, caption=Setup do experimento Milestone 2 - MNIST Reduzido, label=code:milestone2_setup_mnist]
-# Dataset MNIST Reduzido
-dataset_mnist = MNISTReduced(train=True, n_components=100)
-dataloader_mnist = get_dataloader(dataset_mnist, batch_size=128, shuffle=True)
-
-# Model
-vf_mnist = VectorField2D(
-    features=100,
-    hidden_dims=[64, 64],
-    time_embed_dim=16
-)
-cnf_mnist = CNF(vf_mnist).to(device)
-
-# Optimizer
-optimizer_mnist = optim.Adam(cnf_mnist.parameters(), lr=1e-4)
-
-# Training
-train_cnf(cnf_mnist, dataloader_mnist, optimizer_mnist, n_epochs=10)
-\end{lstlisting}
-
-\subsubsection{Trajetórias Contínuas: $x \to z$}
-Para o dataset 2D sintético, as trajetórias são visualizadas diretamente no espaço 2D. A Figura~\ref{fig:milestone2_trajectories_2d} ilustra as trajetórias contínuas aprendidas pelo modelo CNF no dataset \texttt{moons}. O modelo aprende a transformar os dados em direção a uma distribuição Gaussiana, mantendo a estrutura dos dados enquanto realiza a transformação suave.
-
-Para o dataset MNIST reduzido, as trajetórias são visualizadas através de projeção PCA para 2D. A Figura~\ref{fig:milestone2_trajectories_mnist} ilustra as trajetórias contínuas aprendidas pelo modelo CNF. Cada ponto representa uma amostra projetada no espaço 2D das duas primeiras componentes principais. O modelo aprende a transformar os dados de MNIST (projetados) em direção a uma distribuição Gaussiana, mantendo a estrutura dos dígitos enquanto realiza a transformação suave.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/02_moons_cnf_transformation.png}
-    \caption{Trajetórias contínuas aprendidas pelo CNF para o dataset 2D \texttt{moons}. A figura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
-    \label{fig:milestone2_trajectories_2d}
-\end{figure}
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/02_moons_cnf_transformation.png}
-    \caption{Trajetórias contínuas aprendidas pelo CNF para MNIST reduzido, visualizadas através de projeção PCA 2D. A figura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
-    \label{fig:milestone2_trajectories_mnist}
-\end{figure}
-
-\subsubsection{Campo Vetorial Aprendido: $\dot{x} =f(x,t)$}
-A Figura~\ref{fig:milestone2_vectorfield} mostra o campo vetorial $f(x, t)$ aprendido pelo modelo CNF em um grid 2D para o dataset \texttt{moons}, para diferentes valores de $t \in [0, 0.5, 1]$. As setas indicam a direção e magnitude do campo vetorial em cada ponto do espaço. O campo vetorial aprende a direcionar os pontos em direção à distribuição Gaussiana, com maior magnitude nas regiões onde há maior densidade de dados.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/02_moons_cnf_vector_fields.png}
-    \caption{Campo vetorial $f(x, t)$ aprendido pelo CNF em um grid 2D para o dataset \texttt{moons}, para diferentes valores de tempo $t$.}
-    \label{fig:milestone2_vectorfield}
-\end{figure}
-
-\subsubsection{Transformação: $z \sim N(0,I) \to x = \phi(z,1)$}
-A Figura~\ref{fig:milestone2_transformation_2d} apresenta a transformação aprendida pelo modelo CNF no dataset 2D. Observa-se que o modelo consegue mapear efetivamente amostras da distribuição Gaussiana base para a distribuição dos dados, demonstrando a capacidade do CNF em modelar distribuições complexas através de transformações contínuas e invertíveis.
-
-Para o dataset MNIST reduzido, a Figura~\ref{fig:milestone2_transformation_mnist} apresenta a transformação aprendida pelo modelo CNF. O modelo consegue mapear efetivamente amostras da distribuição Gaussiana base para a distribuição dos dados de MNIST (projetados em 2D), demonstrando a escalabilidade do CNF para dimensões intermediárias.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/02_moons_cnf_transformation.png}
-    \caption{Transformação aprendida pelo CNF de $z \sim N(0,I)$ (esquerda) para $x$ (direita) para o dataset 2D \texttt{moons}.}
-    \label{fig:milestone2_transformation_2d}
-\end{figure}
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/02_moons_cnf_transformation.png}
-    \caption{Transformação aprendida pelo CNF de $z \sim N(0,I)$ (esquerda) para $x$ (direita) para MNIST reduzido, visualizada através de projeção PCA 2D.}
-    \label{fig:milestone2_transformation_mnist}
-\end{figure}
-
-\subsection{Milestone 3}
-O modelo FFJORD foi treinado no dataset MNIST completo (784 dimensões) utilizando o estimador Hutchinson para escalabilidade. Os resultados demonstram a capacidade do modelo em aprender transformações contínuas em alta dimensionalidade. O setup do experimento envolve a criação do dataset com preprocessing adequado, modelo e otimizador, como descrito no Código~\ref{code:milestone3_setup}:
-
-\begin{lstlisting}[language=Python, caption=Setup do experimento Milestone 3, label=code:milestone3_setup]
-# Dataset com preprocessing (dequantização + logit transform)
-train_dataset = MNISTComplete(train=True)
-test_dataset = MNISTComplete(train=False)
-train_loader = get_dataloader(train_dataset, batch_size=256, shuffle=True)
-
-# Model
-vf = VectorFieldMNIST(
-    features=784,
-    channels=[512, 512, 512],
-    time_embed_dim=32
-).to(device)
-ffjord = FFJORD(
-    vector_field=vf,
-    num_samples=1,
-    distribution='rademacher'
-).to(device)
-
-# Optimizer
-optimizer = optim.Adam(ffjord.parameters(), lr=1e-4)
-
-# Training com regularização KE
-train_ffjord(
-    ffjord,
-    train_loader,
-    optimizer,
-    device,
-    n_epochs=50,
-    lambda_ke=0.01,
-    warmup_epochs=5
-)
-\end{lstlisting}
-
-\subsubsection{Trajetórias Contínuas: $x \to z$}
-Para o dataset MNIST completo, as trajetórias são visualizadas através de projeção PCA para 2D após a transformação. A Figura~\ref{fig:milestone3_trajectories} ilustra as trajetórias contínuas aprendidas pelo modelo FFJORD. O modelo demonstra capacidade de transformar dados de alta dimensionalidade (784D) em direção a uma distribuição Gaussiana, utilizando o estimador Hutchinson para viabilizar o treinamento.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/03_mnist_ffjord_transformation.png}
-    \caption{Trajetórias contínuas aprendidas pelo FFJORD para MNIST completo, visualizadas através de projeção PCA 2D. A figura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
-    \label{fig:milestone3_trajectories}
-\end{figure}
-
-\subsubsection{Campo Vetorial Aprendido: $\dot{x} =f(x,t)$}
-A Figura~\ref{fig:milestone3_vectorfield} mostra o campo vetorial $f(x, t)$ aprendido pelo modelo FFJORD em um grid 2D (projetado via PCA) para diferentes valores de $t$. O campo vetorial utiliza uma arquitetura CNN para processar imagens de 28×28 pixels, permitindo capturar padrões espaciais locais dos dígitos. A regularização de energia cinética ajuda a suavizar o campo vetorial, melhorando a estabilidade numérica da integração ODE.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/03_mnist_ffjord_vector_fields.png}
-    \caption{Campo vetorial $f(x, t)$ aprendido pelo FFJORD em um grid 2D (projetado via PCA) para diferentes valores de tempo $t$.}
-    \label{fig:milestone3_vectorfield}
-\end{figure}
-
-\subsubsection{Transformação: $z \sim N(0,I) \to x = \phi(z,1)$}
-A Figura~\ref{fig:milestone3_transformation} apresenta a transformação aprendida pelo modelo FFJORD. O modelo consegue gerar amostras realistas de dígitos MNIST a partir de amostras da distribuição Gaussiana base, demonstrando a eficácia do estimador Hutchinson para escalar CNFs a dimensões altas. As amostras geradas preservam características visuais dos dígitos originais, indicando que o modelo aprendeu uma transformação efetiva mesmo em 784 dimensões.
-
-\begin{figure}[hbt!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{imgs/03_mnist_ffjord_transformation.png}
-    \caption{Transformação aprendida pelo FFJORD de $z \sim N(0,I)$ (esquerda) para $x$ (direita) para MNIST completo, visualizada através de projeção PCA 2D e reconstrução de imagens.}
-    \label{fig:milestone3_transformation}
-\end{figure}
 
 % \section{Tradeoff}
 % \section{Dificuldades encontradas}
