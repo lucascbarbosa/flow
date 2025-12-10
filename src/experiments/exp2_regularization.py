@@ -4,10 +4,10 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
-from ..models.ffjord import FFJORD
-from ..models.vector_field import VectorField2D
-from ..utils.datasets import Synthetic2D, get_dataloader
-from ..utils.training import count_nfe
+from src.models.ffjord import FFJORD
+from src.models.vector_field import VectorField2D
+from src.utils.datasets import Synthetic2D, get_dataloader
+from src.utils.training import count_nfe
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict
