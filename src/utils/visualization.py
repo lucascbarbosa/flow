@@ -1,4 +1,5 @@
 """Visualization utilities."""
+import imageio
 import os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -538,6 +539,151 @@ class Synthetic2DViz:
             print(f"Figure saved to: {save_path}")
 
         return ax_left, ax_right
+
+    @classmethod
+    def plot_transformation_gif(
+        cls,
+        model: Union[NeuralODE, CNF],
+        dataset,
+        n_steps: int = 100,
+        n_samples: Optional[int] = None,
+        xlim: Tuple[float, float] = (-3, 3),
+        ylim: Tuple[float, float] = (-3, 3),
+        save_path: Optional[str] = None,
+        fps: int = 10
+    ) -> None:
+        """Generate a GIF showing data distribution transformation over time.
+
+        Creates an animation showing how the data distribution evolves from
+        x(0) to x(1) as the ODE is integrated forward.
+
+        Args:
+            model (Union[NeuralODE, CNF]): Model to use for trajectory
+                integration.
+
+            dataset: Dataset with .data attribute containing initial points.
+
+            n_steps (int): Number of time steps in the trajectory.
+                Default is 100.
+
+            n_samples (int, optional): Number of samples to visualize.
+                If None, uses all data points. Default is None.
+
+            xlim (Tuple[float, float]): Limits in x direction.
+                Default is (-3, 3).
+
+            ylim (Tuple[float, float]): Limits in y direction.
+                Default is (-3, 3).
+
+            save_path (str, optional): Path to save the GIF.
+                If None, raises ValueError. Default is None.
+
+            fps (int): Frames per second for the GIF. Default is 10.
+
+        Raises:
+            ValueError: If save_path is None.
+        """
+        if save_path is None:
+            raise ValueError("save_path must be provided to save the GIF")
+
+        # Ensure directory exists
+        dirname = (
+            os.path.dirname(save_path)
+            if os.path.dirname(save_path) else '.'
+        )
+        os.makedirs(dirname, exist_ok=True)
+
+        # Get initial data
+        data = dataset.data
+        device = next(model.vf.parameters()).device
+
+        # Sample subset if requested
+        if n_samples is not None and n_samples < data.shape[0]:
+            n_total = data.shape[0]
+            indices = torch.randperm(n_total)[:n_samples]
+            x_0 = data[indices].to(device)
+        else:
+            x_0 = data.to(device)
+
+        # Integrate ODE forward from x(0) to x(1)
+        model.eval()
+        with torch.no_grad():
+            x_t = model(x_0, n_steps)
+
+        # x_t shape: (n_steps, n_samples, 2) or (n_steps+1, n_samples, 2)
+        # Ensure we have the right shape
+        if x_t.dim() == 3:
+            # Shape is (n_steps, n_samples, 2) or (n_steps+1, n_samples, 2)
+            n_frames = x_t.shape[0]
+        else:
+            raise ValueError(
+                f"Unexpected x_t shape: {x_t.shape}. "
+                f"Expected 3D [n_steps, n_samples, 2]"
+            )
+
+        # Create frames
+        frames = []
+        print(f"Generating {n_frames} frames...")
+
+        for i in range(n_frames):
+            # Get data at this time step
+            x_t_step = x_t[i]  # (n_samples, 2)
+            x_t_np = x_t_step.detach().cpu().numpy()
+
+            # Create figure for this frame
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+            # Plot data points
+            ax.scatter(
+                x_t_np[:, 0],
+                x_t_np[:, 1],
+                alpha=0.5,
+                s=10,
+                c='blue'
+            )
+
+            # Add unit circle reference for final state
+            if i == n_frames - 1:
+                circle = Circle(
+                    (0, 0),
+                    2,
+                    fill=False,
+                    linestyle='--',
+                    color='gray',
+                    alpha=0.5
+                )
+                ax.add_patch(circle)
+
+            # Calculate time value (assuming t goes from 0 to 1)
+            t_value = i / (n_frames - 1) if n_frames > 1 else 0.0
+
+            ax.set_xlabel(r'$x_1$')
+            ax.set_ylabel(r'$x_2$')
+            ax.set_title(f'Data Distribution at t={t_value:.3f}')
+            # Set fixed limits first
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+            # Use set_aspect with adjustable='box' to maintain equal aspect
+            # while respecting the fixed limits
+            ax.set_aspect('equal', adjustable='box')
+            ax.grid(True, alpha=0.3)
+
+            # Convert figure to image
+            fig.canvas.draw()
+            # Get the RGBA buffer and convert to RGB
+            buf = fig.canvas.buffer_rgba()
+            frame = np.asarray(buf)[:, :, :3]  # Remove alpha channel
+            frames.append(frame)
+
+            plt.close(fig)
+
+            if (i + 1) % 10 == 0:
+                print(f"  Frame {i + 1}/{n_frames}")
+
+        # Save as GIF
+        print(f"Saving GIF to: {save_path}")
+        imageio.mimsave(save_path, frames, fps=fps, loop=0)
+        print("GIF saved successfully!")
 
     @classmethod
     def plot_data_distribution(
