@@ -66,7 +66,25 @@ class FFJORD(nn.Module):
         Returns:
             torch.Tensor: Derivative with shape (batch, features + 1).
         """
+        # Validate state shape
+        expected_features = self.vf.features
+        if state.shape[-1] != expected_features + 1:
+            raise ValueError(
+                f"State shape mismatch: expected last dimension to be "
+                f"{expected_features + 1} (features + 1), but got "
+                f"{state.shape[-1]}. State shape: {state.shape}, "
+                f"expected features: {expected_features}"
+            )
+
         x = state[:, :-1]  # (batch, features)
+
+        # Validate x shape
+        if x.shape[-1] != expected_features:
+            raise ValueError(
+                f"Extracted x shape mismatch: expected last dimension to be "
+                f"{expected_features}, but got {x.shape[-1]}. "
+                f"x shape: {x.shape}, state shape: {state.shape}"
+            )
 
         # Ensure x requires grad for divergence computation
         if not x.requires_grad:
@@ -119,6 +137,15 @@ class FFJORD(nn.Module):
         # Ensure x is 2D: [batch, features]
         if x.dim() == 1:
             x = x.unsqueeze(0)
+
+        # Validate x shape matches expected features
+        expected_features = self.vf.features
+        if x.shape[-1] != expected_features:
+            raise ValueError(
+                f"Input x shape mismatch: expected last dimension to be "
+                f"{expected_features}, but got {x.shape[-1]}. "
+                f"x shape: {x.shape}, expected features: {expected_features}"
+            )
 
         # Ensure x requires grad for proper gradient tracking through ODE
         if torch.is_grad_enabled():

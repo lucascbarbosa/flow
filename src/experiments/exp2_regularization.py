@@ -173,7 +173,7 @@ def compare_regularizations():
             dataloader,
             optimizer,
             device,
-            n_epochs=15,
+            n_epochs=50,
             lambda_ke=lambda_ke,
             lambda_jf=lambda_jf
         )
@@ -186,7 +186,7 @@ def compare_regularizations():
         model.eval()
         with torch.no_grad():
             test_batch = torch.stack(
-                [dataset[i][0] for i in range(100)]
+                [dataset[i] for i in range(100)]
             ).to(device)
             final_log_prob = model.log_prob(test_batch).mean().item()
 

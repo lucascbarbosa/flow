@@ -975,14 +975,14 @@ As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:s
 
 \begin{figure}[H]
     \centering
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_moons_cnf_transformation.png}
         \caption{CNF}
         \label{fig:moons_cnf}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_moons_realnvp_transformation.png}
         \caption{RealNVP}
@@ -992,18 +992,18 @@ As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:s
     \label{fig:moons_comparison}
 \end{figure}
 
-\clearpage
+\newpage
 
 \begin{figure}[H]
     \centering
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_circles_cnf_transformation.png}
         \caption{CNF}
         \label{fig:circles_cnf}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_circles_realnvp_transformation.png}
         \caption{RealNVP}
@@ -1013,18 +1013,18 @@ As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:s
     \label{fig:circles_comparison}
 \end{figure}
 
-\clearpage
+\newpage
 
 \begin{figure}[H]
     \centering
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_spirals_cnf_transformation.png}
         \caption{CNF}
         \label{fig:spirals_cnf}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{imgs/02_spirals_realnvp_transformation.png}
         \caption{RealNVP}
@@ -1034,9 +1034,10 @@ As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:s
     \label{fig:spirals_comparison}
 \end{figure}
 
+É possível notar que o CNF, além de ser mais custoso computacionalmente de treinar, obtém resultados significantemente piores que os do RealNVP, que é mais rápido e produz amostras melhores. A única distribuição em que o CNF se saiu tão bem quanto ou melhor que o RealNVP foi para o \texttt{Moons}.
+
 \subsection{Milestone 3}
 Nesse milestone, utiliza-se o dataset MNIST completo e o traço estimado de Hutchinson no modelo FFJORD.
-
 
 
 \section{Experimentos}
@@ -1045,33 +1046,74 @@ A Tabela \ref{tab:exp1_results} descreve as diferentes configurações de solver
 
 \begin{table}[hbt!]
     \centering
-    \begin{tabular}{|cccc|ccc|}
-        \hline
-        Distribuição & Solver & \texttt{rtol} & \texttt{atol} & NFEs & tempo forward (ms) & tempo backward (ms) \\
-        \hline
-        \hline
-        moons & euler & -- & -- & 9 & 29.5 & 30.5 \\
-        moons & rk4 & -- & -- & 36 & 78.2 & 78.1 \\
-        moons & dopri5 & 1e{-3} & 1e{-4} & 56 & 31.4 & 32.0 \\
-        moons & dopri5 & 1e{-4} & 1e{-5} & 86 & 42.7 & 43.2 \\
-        moons & dopri5 & 1e{-5} & 1e{-6} & 122 & 56.6 & 59.2 \\
-        \hline
-        circles & euler & -- & -- & 9 & 26.8 & 26.8 \\
-        circles & rk4 & -- & -- & 36 & 71.7 & 73.2 \\
-        circles & dopri5 & 1e{-3} & 1e{-4} & 50 & 31.4 & 42.0 \\
-        circles & dopri5 & 1e{-4} & 1e{-5} & 68 & 36.7 & 39.3 \\
-        circles & dopri5 & 1e{-5} & 1e{-6} & 110 & 58.9 & 61.0 \\
-        \hline
-        spirals & euler & -- & -- & 9 & 115.6 & 26.1 \\
-        spirals & rk4 & -- & -- & 36 & 71.2 & 72.6 \\
-        spirals & dopri5 & 1e{-3} & 1e{-4} & 32 & 23.4 & 25.5 \\
-        spirals & dopri5 & 1e{-4} & 1e{-5} & 38 & 25.7 & 27.5 \\
-        spirals & dopri5 & 1e{-5} & 1e{-6} & 74 & 39.4 & 34.4 \\
-        \hline
-    \end{tabular}
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cccc|ccc}
+            \hline
+            Distribuição & Solver & \texttt{rtol} & \texttt{atol} & NFEs & tempo forward (ms) & tempo backward (ms) \\
+            \hline
+            moons & euler & -- & -- & 9 & 29.5 & 30.5 \\
+            moons & rk4 & -- & -- & 36 & 78.2 & 78.1 \\
+            moons & dopri5 & 1e{-3} & 1e{-4} & 56 & 31.4 & 32.0 \\
+            moons & dopri5 & 1e{-4} & 1e{-5} & 86 & 42.7 & 43.2 \\
+            moons & dopri5 & 1e{-5} & 1e{-6} & 122 & 56.6 & 59.2 \\
+            circles & euler & -- & -- & 9 & 26.8 & 26.8 \\
+            circles & rk4 & -- & -- & 36 & 71.7 & 73.2 \\
+            circles & dopri5 & 1e{-3} & 1e{-4} & 50 & 31.4 & 42.0 \\
+            circles & dopri5 & 1e{-4} & 1e{-5} & 68 & 36.7 & 39.3 \\
+            circles & dopri5 & 1e{-5} & 1e{-6} & 110 & 58.9 & 61.0 \\
+            spirals & euler & -- & -- & 9 & 115.6 & 26.1 \\
+            spirals & rk4 & -- & -- & 36 & 71.2 & 72.6 \\
+            spirals & dopri5 & 1e{-3} & 1e{-4} & 32 & 23.4 & 25.5 \\
+            spirals & dopri5 & 1e{-4} & 1e{-5} & 38 & 25.7 & 27.5 \\
+            spirals & dopri5 & 1e{-5} & 1e{-6} & 74 & 39.4 & 34.4 \\
+            \hline
+        \end{tabular}
+    }
     \caption{Experimento 1: Configurações entre solvers e tolerâncias e as respectivas métricas.}
     \label{tab:exp1_results}
 \end{table}
+
+\subsection{Regularizações}
+A tabela \ref{tab:exp2_results} mostra os resultados do Experimento 2, comparando diferentes configurações de regularização aplicadas ao modelo FFJORD. As regularizações testadas são:
+\begin{itemize}
+    \item \textbf{Kinetic Energy (KE)}: Penaliza velocidades altas no campo vetorial ($\lambda_{KE}$)
+    \item \textbf{Jacobian Frobenius (JF)}: Penaliza Jacobiano complexo ($\lambda_{JF}$)
+\end{itemize}
+
+As métricas avaliadas são:
+\begin{itemize}
+    \item \textbf{Log-Prob}: Log-likelihood final no conjunto de teste (valores maiores indicam melhor ajuste)
+    \item \textbf{NFE}: Número de avaliações da função (Number of Function Evaluations) durante a integração ODE
+\end{itemize}
+
+\begin{table}[hbt!]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cc|cc|cc}
+            \hline
+            $\lambda_{KE}$ & $\lambda_{JF}$ & Log-Prob & NFE & $\Delta$ Log-Prob & $\Delta$ NFE \\
+            \hline
+            0.0 & 0.0 & 2.5159 & 724 & -- & -- \\
+            0.01 & 0.0 & 2.5709 & 364 & +0.0550 & -360 \\
+            0.0 & 0.01 & 2.6805 & 1024 & +0.1647 & +300 \\
+            0.01 & 0.01 & 2.7906 & 640 & +0.2748 & -84 \\
+            0.1 & 0.0 & 2.4474 & 496 & -0.0685 & -228 \\
+            0.0 & 0.1 & 2.7408 & 820 & +0.2249 & +96 \\
+            0.1 & 0.1 & \textbf{2.8477} & 688 & +0.3318 & -36 \\
+            \hline
+        \end{tabular}
+    }
+    \caption{Experimento 2: Diferentes configurações de regularizações e as respectivas métricas. $\Delta$ Log-Prob e $\Delta$ NFE são as diferenças em relação ao baseline (sem regularização). O melhor resultado de Log-Prob está destacado em negrito.}
+    \label{tab:exp2_results}
+\end{table}
+
+Os resultados mostram que:
+\begin{itemize}
+    \item A configuração com ambas as regularizações em valores altos ($\lambda_{KE}=0.1, \lambda_{JF}=0.1$) obteve o melhor Log-Prob (2.8477), representando um ganho de +0.3318 em relação ao baseline.
+    \item A configuração com apenas Kinetic Energy em valor baixo ($\lambda_{KE}=0.01, \lambda_{JF}=0.0$) obteve o menor NFE (364), reduzindo em 360 avaliações em relação ao baseline, mantendo um Log-Prob competitivo (+0.0550).
+    \item A regularização Jacobian Frobenius isolada ($\lambda_{KE}=0.0, \lambda_{JF}=0.01$) aumentou significativamente o NFE (+300), mas também melhorou o Log-Prob (+0.1647).
+    \item A combinação de ambas as regularizações em valores baixos ($\lambda_{KE}=0.01, \lambda_{JF}=0.01$) oferece um bom equilíbrio, melhorando o Log-Prob (+0.2748) com apenas uma pequena redução no NFE (-84).
+\end{itemize}
 
 % \section{Tradeoff}
 % \section{Dificuldades encontradas}
