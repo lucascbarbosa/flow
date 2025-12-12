@@ -1,9 +1,8 @@
 """Experimento 2: Regularização e tolerâncias."""
 import os
+import csv
 import torch
 import torch.optim as optim
-import matplotlib.pyplot as plt
-import numpy as np
 from src.models.ffjord import FFJORD
 from src.models.vector_field import VectorField2D
 from src.utils.datasets import Synthetic2D, get_dataloader
@@ -134,8 +133,99 @@ def train_ffjord_with_regularization(
     return history
 
 
-def compare_regularizations():
-    """Compara diferentes combinações de regularização."""
+def get_checkpoint_path(
+    lambda_ke: float,
+    lambda_jf: float,
+    checkpoint_dir: str = 'results/checkpoints/exp2'
+) -> str:
+    """Generate checkpoint file path for a regularization configuration.
+
+    Args:
+        lambda_ke: Kinetic energy regularization weight.
+        lambda_jf: Jacobian Frobenius regularization weight.
+        checkpoint_dir: Directory to save checkpoints.
+
+    Returns:
+        Full path to checkpoint file.
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    # Create safe filename by replacing special characters
+    safe_ke = str(lambda_ke).replace('.', '_')
+    safe_jf = str(lambda_jf).replace('.', '_')
+    filename = f"checkpoint_ke_{safe_ke}_jf_{safe_jf}.pt"
+    return os.path.join(checkpoint_dir, filename)
+
+
+def save_checkpoint(
+    model: FFJORD,
+    optimizer: torch.optim.Optimizer,
+    history: Dict[str, list],
+    nfe: int,
+    final_log_prob: float,
+    lambda_ke: float,
+    lambda_jf: float,
+    checkpoint_path: str
+) -> None:
+    """Save model checkpoint.
+
+    Args:
+        model: Trained FFJORD model.
+        optimizer: Optimizer state.
+        history: Training history dictionary.
+        nfe: Number of function evaluations.
+        final_log_prob: Final log-likelihood.
+        lambda_ke: Kinetic energy regularization weight.
+        lambda_jf: Jacobian Frobenius regularization weight.
+        checkpoint_path: Path to save checkpoint.
+    """
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'history': history,
+        'nfe': nfe,
+        'final_log_prob': final_log_prob,
+        'lambda_ke': lambda_ke,
+        'lambda_jf': lambda_jf,
+        'model_config': {
+            'features': model.vf.features,
+            'hidden_dims': [64, 64],  # Hardcoded for now, match training
+            'time_embed_dim': 16
+        }
+    }
+    torch.save(checkpoint, checkpoint_path)
+    print(f"Checkpoint saved to: {checkpoint_path}")
+
+
+def load_checkpoint(
+    checkpoint_path: str,
+    device: torch.device
+) -> Dict:
+    """Load model checkpoint.
+
+    Args:
+        checkpoint_path: Path to checkpoint file.
+        device: Device to load model on.
+
+    Returns:
+        Dictionary with checkpoint data including model, optimizer, etc.
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    print(f"Checkpoint loaded from: {checkpoint_path}")
+    return checkpoint
+
+
+def compare_regularizations(
+    checkpoint_dir: str = 'results/checkpoints/exp2',
+    resume: bool = True,
+    n_epochs: int = 50
+):
+    """Compara diferentes combinações de regularização.
+
+    Args:
+        checkpoint_dir: Directory to save/load checkpoints.
+        resume: If True, load existing checkpoints instead of retraining.
+        n_epochs: Number of training epochs if training from scratch.
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Dataset
@@ -160,35 +250,77 @@ def compare_regularizations():
         config_name = f"λ_KE={lambda_ke}, λ_JF={lambda_jf}"
         print(f"\n=== Testando {config_name} ===")
 
-        # Modelo
-        vf = VectorField2D(
-            features=2, hidden_dims=[64, 64], time_embed_dim=16
-        )
-        model = FFJORD(vf).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=1e-4)
-
-        # Treinar com regularização
-        history = train_ffjord_with_regularization(
-            model,
-            dataloader,
-            optimizer,
-            device,
-            n_epochs=50,
-            lambda_ke=lambda_ke,
-            lambda_jf=lambda_jf
+        # Checkpoint path for this configuration
+        checkpoint_path = get_checkpoint_path(
+            lambda_ke, lambda_jf, checkpoint_dir
         )
 
-        # Contar NFEs (usando amostras de N(0, I))
-        sample_batch = torch.randn(10, 2).to(device)
-        nfe = count_nfe(model, sample_batch)
+        # Try to load checkpoint if it exists and resume is enabled
+        if resume and os.path.exists(checkpoint_path):
+            print(f"Loading checkpoint: {checkpoint_path}")
+            checkpoint = load_checkpoint(checkpoint_path, device)
 
-        # Calcular log-likelihood final no dataset
-        model.eval()
-        with torch.no_grad():
-            test_batch = torch.stack(
-                [dataset[i] for i in range(100)]
-            ).to(device)
-            final_log_prob = model.log_prob(test_batch).mean().item()
+            # Reconstruct model
+            model_config = checkpoint['model_config']
+            vf = VectorField2D(
+                features=model_config['features'],
+                hidden_dims=model_config['hidden_dims'],
+                time_embed_dim=model_config['time_embed_dim']
+            )
+            model = FFJORD(vf).to(device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+
+            # Reconstruct optimizer
+            optimizer = optim.Adam(model.parameters(), lr=1e-4)
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+            # Load results
+            history = checkpoint['history']
+            nfe = checkpoint['nfe']
+            final_log_prob = checkpoint['final_log_prob']
+
+            print(f"Loaded: NFEs={nfe}, log-prob={final_log_prob:.4f}")
+        else:
+            # Train from scratch
+            # Modelo
+            vf = VectorField2D(
+                features=2, hidden_dims=[64, 64], time_embed_dim=16
+            )
+            model = FFJORD(vf).to(device)
+            optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+            # Treinar com regularização
+            history = train_ffjord_with_regularization(
+                model,
+                dataloader,
+                optimizer,
+                device,
+                n_epochs=n_epochs,
+                lambda_ke=lambda_ke,
+                lambda_jf=lambda_jf
+            )
+
+            # Contar NFEs (usando amostras de N(0, I))
+            sample_batch = torch.randn(10, 2).to(device)
+            nfe = count_nfe(model, sample_batch)
+
+            # Calcular log-likelihood final no dataset
+            model.eval()
+            with torch.no_grad():
+                test_batch = torch.stack(
+                    [dataset[i] for i in range(100)]
+                ).to(device)
+                final_log_prob = model.log_prob(test_batch).mean().item()
+
+            # Save checkpoint
+            save_checkpoint(
+                model, optimizer, history, nfe, final_log_prob,
+                lambda_ke, lambda_jf, checkpoint_path
+            )
+
+            print(
+                f"NFEs: {nfe}, Final log-prob: {final_log_prob:.4f}"
+            )
 
         results[config_name] = {
             'lambda_ke': lambda_ke,
@@ -199,404 +331,83 @@ def compare_regularizations():
             'model': model
         }
 
-        print(
-            f"NFEs: {nfe}, Final log-prob: {final_log_prob:.4f}"
-        )
-
     return results
 
 
-def plot_convergence_analysis(
+def save_summary_csv(
     results: Dict[str, Dict],
-    save_dir: str = 'results/figures'
+    save_dir: str = 'results'
 ) -> None:
-    """Plot training convergence curves for all regularization configs.
+    """Save regularization results to CSV summary table.
 
     Args:
         results: Dictionary with results from compare_regularizations().
-        save_dir: Directory to save figures.
+        save_dir: Directory to save CSV file.
     """
     os.makedirs(save_dir, exist_ok=True)
+    csv_path = os.path.join(save_dir, 'exp2_summary.csv')
 
-    # Create figure with subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    ax_loss, ax_nll = axes[0]
-    ax_ke, ax_jf = axes[1]
+    # Get baseline for computing differences
+    baseline = results.get('λ_KE=0.0, λ_JF=0.0')
+    baseline_log_prob = baseline['final_log_prob'] if baseline else None
+    baseline_nfe = baseline['nfe'] if baseline else None
 
-    # Color map for different configs
-    colors = plt.cm.tab10(np.linspace(0, 1, len(results)))
-
-    for (config_name, result), color in zip(results.items(), colors):
-        history = result['history']
-        epochs = range(1, len(history['loss']) + 1)
-
-        # Plot loss
-        ax_loss.plot(
-            epochs, history['loss'],
-            label=config_name, color=color, linewidth=2, alpha=0.8
+    # Prepare CSV data
+    rows = []
+    for config_name, result in results.items():
+        ll_diff = (
+            result['final_log_prob'] - baseline_log_prob
+            if baseline_log_prob is not None
+            else None
+        )
+        nfe_diff = (
+            result['nfe'] - baseline_nfe
+            if baseline_nfe is not None
+            else None
         )
 
-        # Plot NLL
-        ax_nll.plot(
-            epochs, history['nll'],
-            label=config_name, color=color, linewidth=2, alpha=0.8
-        )
+        rows.append({
+            'Config': config_name,
+            'Lambda_KE': result['lambda_ke'],
+            'Lambda_JF': result['lambda_jf'],
+            'Log_Prob': result['final_log_prob'],
+            'NFE': result['nfe'],
+            'Log_Prob_Diff': ll_diff if ll_diff is not None else '',
+            'NFE_Diff': nfe_diff if nfe_diff is not None else ''
+        })
 
-        # Plot KE
-        ax_ke.plot(
-            epochs, history['ke'],
-            label=config_name, color=color, linewidth=2, alpha=0.8
-        )
+    # Write CSV
+    fieldnames = [
+        'Config', 'Lambda_KE', 'Lambda_JF', 'Log_Prob', 'NFE',
+        'Log_Prob_Diff', 'NFE_Diff'
+    ]
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
-        # Plot JF
-        ax_jf.plot(
-            epochs, history['jf'],
-            label=config_name, color=color, linewidth=2, alpha=0.8
-        )
-
-    # Format loss plot
-    ax_loss.set_xlabel('Epoch', fontsize=12)
-    ax_loss.set_ylabel('Total Loss', fontsize=12)
-    ax_loss.set_title(
-        'Training Loss Convergence', fontsize=14, fontweight='bold'
-    )
-    ax_loss.legend(fontsize=8, loc='best')
-    ax_loss.grid(True, alpha=0.3)
-
-    # Format NLL plot
-    ax_nll.set_xlabel('Epoch', fontsize=12)
-    ax_nll.set_ylabel('Negative Log-Likelihood', fontsize=12)
-    ax_nll.set_title('NLL Convergence', fontsize=14, fontweight='bold')
-    ax_nll.legend(fontsize=8, loc='best')
-    ax_nll.grid(True, alpha=0.3)
-
-    # Format KE plot
-    ax_ke.set_xlabel('Epoch', fontsize=12)
-    ax_ke.set_ylabel('Kinetic Energy', fontsize=12)
-    ax_ke.set_title(
-        'Kinetic Energy Regularization', fontsize=14, fontweight='bold'
-    )
-    ax_ke.legend(fontsize=8, loc='best')
-    ax_ke.grid(True, alpha=0.3)
-
-    # Format JF plot
-    ax_jf.set_xlabel('Epoch', fontsize=12)
-    ax_jf.set_ylabel('Jacobian Frobenius Norm', fontsize=12)
-    ax_jf.set_title(
-        'Jacobian Frobenius Regularization', fontsize=14, fontweight='bold'
-    )
-    ax_jf.legend(fontsize=8, loc='best')
-    ax_jf.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    save_path = os.path.join(save_dir, 'exp2_convergence_analysis.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"Convergence analysis saved to: {save_path}")
-    plt.close()
-
-
-def plot_log_likelihood_comparison(
-    results: Dict[str, Dict],
-    save_dir: str = 'results/figures'
-) -> None:
-    """Compare final log-likelihoods across different regularization configs.
-
-    Args:
-        results: Dictionary with results from compare_regularizations().
-        save_dir: Directory to save figures.
-    """
-    os.makedirs(save_dir, exist_ok=True)
-
-    config_names = list(results.keys())
-    log_probs = [results[name]['final_log_prob'] for name in config_names]
-    nfes = [results[name]['nfe'] for name in config_names]
-
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-
-    # Plot 1: Log-likelihood comparison
-    colors = plt.cm.viridis(np.linspace(0, 1, len(config_names)))
-    bars1 = ax1.barh(config_names, log_probs, color=colors, alpha=0.7)
-    ax1.set_xlabel('Final Log-Likelihood', fontsize=12)
-    ax1.set_title('Log-Likelihood Comparison', fontsize=14, fontweight='bold')
-    ax1.grid(True, alpha=0.3, axis='x')
-
-    # Add value labels on bars
-    for i, (bar, val) in enumerate(zip(bars1, log_probs)):
-        ax1.text(
-            val, i, f' {val:.4f}',
-            va='center', fontsize=9, fontweight='bold'
-        )
-
-    # Plot 2: NFE comparison
-    bars2 = ax2.barh(config_names, nfes, color=colors, alpha=0.7)
-    ax2.set_xlabel(
-        'Number of Function Evaluations (NFE)', fontsize=12
-    )
-    ax2.set_title('NFE Comparison', fontsize=14, fontweight='bold')
-    ax2.grid(True, alpha=0.3, axis='x')
-
-    # Add value labels on bars
-    for i, (bar, val) in enumerate(zip(bars2, nfes)):
-        ax2.text(
-            val, i, f' {val}',
-            va='center', fontsize=9, fontweight='bold'
-        )
-
-    plt.tight_layout()
-    save_path = os.path.join(save_dir, 'exp2_loglikelihood_comparison.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"Log-likelihood comparison saved to: {save_path}")
-    plt.close()
-
-
-def plot_sample_quality_comparison(
-    results: Dict[str, Dict],
-    dataset: Synthetic2D,
-    n_samples: int = 1000,
-    save_dir: str = 'results/figures'
-) -> None:
-    """Visualize sample quality from different regularization configs.
-
-    Args:
-        results: Dictionary with results from compare_regularizations().
-        dataset: Original dataset for reference.
-        n_samples: Number of samples to generate.
-        save_dir: Directory to save figures.
-    """
-    os.makedirs(save_dir, exist_ok=True)
-
-    n_configs = len(results)
-    n_cols = 3
-    n_rows = (n_configs + n_cols - 1) // n_cols
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 6 * n_rows))
-    if n_rows == 1:
-        axes = axes.reshape(1, -1)
-    axes = axes.flatten()
-
-    # Plot original data in first subplot
-    data_np = dataset.data.cpu().numpy()
-    axes[0].scatter(
-        data_np[:, 0], data_np[:, 1],
-        alpha=0.5, s=10, c='blue'
-    )
-    axes[0].set_title('Original Data', fontsize=12, fontweight='bold')
-    axes[0].set_xlabel(r'$x_1$', fontsize=10)
-    axes[0].set_ylabel(r'$x_2$', fontsize=10)
-    axes[0].grid(True, alpha=0.3)
-    axes[0].axis('equal')
-
-    # Plot samples from each model
-    for idx, (config_name, result) in enumerate(results.items(), start=1):
-        model = result['model']
-        model.eval()
-
-        with torch.no_grad():
-            samples = model.sample(n_samples)
-            samples_np = samples.cpu().numpy()
-
-        axes[idx].scatter(
-            samples_np[:, 0], samples_np[:, 1],
-            alpha=0.5, s=10, c='red'
-        )
-        title = (
-            f'{config_name}\n'
-            f'(LL: {result["final_log_prob"]:.3f}, NFE: {result["nfe"]})'
-        )
-        axes[idx].set_title(title, fontsize=10, fontweight='bold')
-        axes[idx].set_xlabel(r'$x_1$', fontsize=10)
-        axes[idx].set_ylabel(r'$x_2$', fontsize=10)
-        axes[idx].grid(True, alpha=0.3)
-        axes[idx].axis('equal')
-
-    # Hide unused subplots
-    for idx in range(len(results) + 1, len(axes)):
-        axes[idx].axis('off')
-
-    plt.suptitle(
-        'Sample Quality Comparison Across Regularization Configs',
-        fontsize=16, fontweight='bold', y=0.995
-    )
-    plt.tight_layout()
-    save_path = os.path.join(save_dir, 'exp2_sample_quality_comparison.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"Sample quality comparison saved to: {save_path}")
-    plt.close()
-
-
-def plot_transformation_comparison(
-    results: Dict[str, Dict],
-    save_dir: str = 'results/figures'
-) -> None:
-    """Visualize transformations from z ~ N(0,I) to x for each config.
-
-    Args:
-        results: Dictionary with results from compare_regularizations().
-        save_dir: Directory to save figures.
-    """
-    os.makedirs(save_dir, exist_ok=True)
-
-    n_configs = len(results)
-    n_cols = 2
-    n_rows = n_configs
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 8 * n_rows))
-    if n_rows == 1:
-        axes = axes.reshape(1, -1)
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    n_samples = 500
-
-    for idx, (config_name, result) in enumerate(results.items()):
-        model = result['model']
-        ax_left, ax_right = axes[idx]
-
-        # Sample z ~ N(0, I)
-        z = torch.randn(n_samples, 2, device=device)
-
-        # Transform z -> x using FFJORD
-        model.eval()
-        with torch.no_grad():
-            x, _ = model.backward(z)
-
-        z_np = z.cpu().numpy()
-        x_np = x.cpu().numpy()
-
-        # LEFT PLOT: Initial z samples
-        ax_left.scatter(
-            z_np[:, 0], z_np[:, 1],
-            marker='o', s=10, alpha=0.6, linewidths=1
-        )
-        from matplotlib.patches import Circle
-        circle = Circle(
-            (0, 0), 2, fill=False, linestyle='--', color='gray'
-        )
-        ax_left.add_patch(circle)
-        ax_left.set_xlabel(r'$x_1$', fontsize=10)
-        ax_left.set_ylabel(r'$x_2$', fontsize=10)
-        ax_left.set_title(
-            f'{config_name} - Base Distribution',
-            fontsize=11, fontweight='bold'
-        )
-        ax_left.set_xlim(-3, 3)
-        ax_left.set_ylim(-3, 3)
-        ax_left.grid(True, alpha=0.3)
-        ax_left.axis('equal')
-
-        # RIGHT PLOT: Transformed samples
-        ax_right.scatter(
-            x_np[:, 0], x_np[:, 1],
-            alpha=0.5, s=10
-        )
-        ax_right.set_xlabel(r'$x_1$', fontsize=10)
-        ax_right.set_ylabel(r'$x_2$', fontsize=10)
-        ax_right.set_title(
-            f'{config_name} - Transformed Samples',
-            fontsize=11, fontweight='bold'
-        )
-        ax_right.grid(True, alpha=0.3)
-        ax_right.axis('equal')
-
-    plt.suptitle(
-        'Transformation Comparison: z ~ N(0,I) → x',
-        fontsize=16, fontweight='bold', y=0.995
-    )
-    plt.tight_layout()
-    save_path = os.path.join(save_dir, 'exp2_transformation_comparison.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"Transformation comparison saved to: {save_path}")
-    plt.close()
+    print(f"CSV summary saved to: {csv_path}")
 
 
 def analyze_regularization_impact(
     results: Dict[str, Dict],
     dataset: Synthetic2D,
-    save_dir: str = 'results/figures'
+    save_dir: str = 'results'
 ) -> None:
-    """Comprehensive analysis of regularization impact.
-
-    Creates all analysis plots and saves summary statistics.
+    """Generate CSV summary of regularization impact.
 
     Args:
         results: Dictionary with results from compare_regularizations().
-        dataset: Original dataset for reference.
-        save_dir: Directory to save figures and summary.
+        dataset: Original dataset for reference (unused, kept for
+            compatibility).
+        save_dir: Directory to save CSV summary.
     """
     print("\n" + "=" * 60)
-    print("GENERATING COMPREHENSIVE ANALYSIS")
+    print("GENERATING CSV SUMMARY")
     print("=" * 60)
 
-    # 1. Convergence analysis
-    print("\n1. Plotting convergence curves...")
-    plot_convergence_analysis(results, save_dir)
+    save_summary_csv(results, save_dir)
 
-    # 2. Log-likelihood comparison
-    print("\n2. Comparing log-likelihoods...")
-    plot_log_likelihood_comparison(results, save_dir)
-
-    # 3. Sample quality comparison
-    print("\n3. Visualizing sample quality...")
-    plot_sample_quality_comparison(results, dataset, save_dir=save_dir)
-
-    # 4. Transformation comparison
-    print("\n4. Comparing transformations...")
-    plot_transformation_comparison(results, save_dir)
-
-    # 5. Summary statistics
-    print("\n5. Generating summary statistics...")
-    summary_path = os.path.join(save_dir, 'exp2_summary.txt')
-    with open(summary_path, 'w') as f:
-        f.write("=" * 60 + "\n")
-        f.write("REGULARIZATION IMPACT ANALYSIS SUMMARY\n")
-        f.write("=" * 60 + "\n\n")
-
-        f.write("Configuration Comparison:\n")
-        f.write("-" * 60 + "\n")
-        f.write(f"{'Config':<30} {'Log-Prob':<15} {'NFE':<10}\n")
-        f.write("-" * 60 + "\n")
-
-        for config_name, result in results.items():
-            f.write(
-                f"{config_name:<30} "
-                f"{result['final_log_prob']:<15.4f} "
-                f"{result['nfe']:<10}\n"
-            )
-
-        f.write("\n" + "=" * 60 + "\n")
-        f.write("KEY INSIGHTS:\n")
-        f.write("=" * 60 + "\n\n")
-
-        # Find best log-likelihood
-        best_ll = max(results.items(), key=lambda x: x[1]['final_log_prob'])
-        f.write(
-            f"Best Log-Likelihood: {best_ll[0]} "
-            f"({best_ll[1]['final_log_prob']:.4f})\n"
-        )
-
-        # Find lowest NFE
-        lowest_nfe = min(results.items(), key=lambda x: x[1]['nfe'])
-        f.write(f"Lowest NFE: {lowest_nfe[0]} ({lowest_nfe[1]['nfe']})\n")
-
-        # Compare baseline vs regularized
-        baseline = results.get('λ_KE=0.0, λ_JF=0.0')
-        if baseline:
-            f.write("\nBaseline (no regularization):\n")
-            f.write(f"  Log-Prob: {baseline['final_log_prob']:.4f}\n")
-            f.write(f"  NFE: {baseline['nfe']}\n")
-
-            for config_name, result in results.items():
-                if config_name != 'λ_KE=0.0, λ_JF=0.0':
-                    ll_diff = (
-                        result['final_log_prob'] -
-                        baseline['final_log_prob']
-                    )
-                    nfe_diff = result['nfe'] - baseline['nfe']
-                    f.write(f"\n{config_name}:\n")
-                    f.write(f"  Log-Prob diff: {ll_diff:+.4f}\n")
-                    f.write(f"  NFE diff: {nfe_diff:+d}\n")
-
-    print(f"Summary saved to: {summary_path}")
     print("\n" + "=" * 60)
     print("ANALYSIS COMPLETE!")
     print("=" * 60 + "\n")

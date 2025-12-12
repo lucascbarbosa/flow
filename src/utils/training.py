@@ -294,6 +294,7 @@ class CountingVectorField2D(nn.Module):
         """."""
         super().__init__()
         self.vf = vf
+        self.features = vf.features
         self.nfe = 0
 
     def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -303,7 +304,7 @@ class CountingVectorField2D(nn.Module):
 
 
 def count_nfe(
-    model: NeuralODE | CNF,
+    model: NeuralODE | CNF | FFJORD,
     x: torch.Tensor,
     n_steps: int = 10
 ) -> int:
