@@ -1,0 +1,620 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+% Packages
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage[brazil]{babel}
+
+% Code listings style
+\lstset{
+    backgroundcolor=\color{lightgray!20},
+    commentstyle=\color{green!70!black},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{gray},
+    stringstyle=\color{purple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=none,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    language=Python
+}
+
+% Title information
+\title{Relatório Mini Projeto 1 Flow}
+\subtitle{Neural ODEs e Continuous Normalizing Flows}
+\author{Rafael Dias, Lucas Barbosa}
+\date{Dezembro 2025}
+\institute{}
+
+% Custom commands
+\newcommand{\trace}{\text{tr}}
+\newcommand{\logdet}{\log \det}
+
+\begin{document}
+
+% Title slide
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% Outline
+\begin{frame}{Sumário}
+    \tableofcontents
+\end{frame}
+
+% ===========================================
+% SECTION 1: INTRODUÇÃO
+% ===========================================
+\section{Introdução}
+
+\begin{frame}{Introdução}
+    \begin{itemize}
+        \item \textbf{Continuous Normalizing Flows (CNFs)} têm se destacado como alternativa promissora aos modelos baseados em difusão
+        \item Oferecem formalização mais direta e explícita dos objetivos de geração
+        \item Avanços recentes (ex: Midjourney) sugerem ganhos expressivos de eficiência
+        \item Este trabalho investiga diferentes abordagens de modelagem por CNFs em problemas de complexidade reduzida
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Objetivos}
+    \begin{enumerate}
+        \item Implementar Neural ODEs usando \texttt{torchdiffeq} para aprendizado de transformações em dados 2D
+        \item Compreender e implementar Continuous Normalizing Flows com cálculo exato de trace
+        \item Aplicar técnicas de estimação de trace (Hutchinson) para escalabilidade
+        \item Analisar trade-offs computacionais entre CNFs e discrete flows
+        \item Preparar-se conceitualmente para Flow Matching (Módulo 2)
+    \end{enumerate}
+\end{frame}
+
+% ===========================================
+% SECTION 2: MODELOS
+% ===========================================
+\section{Modelos}
+
+\begin{frame}{Vector Field}
+    O cerne de todos os modelos consiste no \texttt{VectorField}, que aproxima o campo vetorial de velocidades:
+    \begin{equation*}
+        \dot{x} = f_\theta(x, t)
+    \end{equation*}
+    \begin{itemize}
+        \item MLP simples de 2 camadas ocultas com ativação $\tanh$
+        \item Embedding temporal através de funções senoidais
+        \item Para $d_{emb}$ dimensões:
+        \begin{align*}
+            \text{PE}_{2i}(t) &= \sin\left(\frac{t}{10000^{2i/d_{emb}}}\right) \\
+            \text{PE}_{2i+1}(t) &= \cos\left(\frac{t}{10000^{2i/d_{emb}}}\right)
+        \end{align*}
+        \item Utilizamos $d_{emb} = 16$ para dados 2D e $d_{emb} = 32$ para MNIST
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Neural ODE}
+    \begin{itemize}
+        \item Aprende um campo vetorial contínuo capaz de transformar distribuições simples em distribuições alvo
+        \item Integra o campo de velocidades:
+        \begin{equation*}
+            \phi(x,t) = \int_{0}^t f(x,s) \, ds
+        \end{equation*}
+        \item Treinamento via função de custo de regressão (MSE)
+        \item Amostras de tempo $t$ equidistantes no intervalo $[0, 1]$
+        \item Condições iniciais $x_0$ amostradas de uma distribuição gaussiana
+        \item Posição intermediária $x_t$ estimada por interpolação linear
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Continuous Normalizing Flows}
+    CNFs estendem Neural ODEs para modelagem generativa usando a fórmula de mudança de variáveis:
+    \begin{equation*}
+        \log p(x) = \log p(z) + \int_0^1 \trace\left(\frac{\partial f}{\partial x}\right) dt
+    \end{equation*}
+    \begin{itemize}
+        \item $z = \varphi_0(x)$ obtido através de integração reversa
+        \item O traço garante a inversibilidade da função
+        \item O caminho de $x(0)$ para $x(1)$ é o mesmo que o caminho de $x(1)$ para $x(0)$
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{FFJORD}
+    \textbf{FFJORD} (Free-form Continuous Dynamics) resolve o problema de complexidade computacional:
+    \begin{itemize}
+        \item CNFs com trace exato: complexidade $\mathcal{O}(d^2)$
+        \item FFJORD com estimador Hutchinson: complexidade $\mathcal{O}(d)$
+        \item Permite treinamento eficiente em dados de alta dimensionalidade (ex: MNIST com 784 dimensões)
+        \item Mantém todas as vantagens dos CNFs:
+        \begin{itemize}
+            \item Transformações contínuas e invertíveis
+            \item Alta expressividade através de campos vetoriais livres
+            \item Integração numérica adaptativa
+            \item Backpropagation eficiente via método adjunto
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Cálculo de Trace}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Trace Exato}
+            \begin{equation*}
+                \trace\left(\frac{\partial f}{\partial x}\right) = \sum_{i=1}^d \frac{\partial f_i}{\partial x_i}
+            \end{equation*}
+            \begin{itemize}
+                \item Complexidade $\mathcal{O}(d^2)$
+                \item Requer $d$ passes de backpropagation
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \textbf{Estimador Hutchinson}
+            \begin{equation*}
+                \trace(A) = \mathbb{E}_{\epsilon \sim p(\epsilon)}[\epsilon^T A \epsilon]
+            \end{equation*}
+            \begin{itemize}
+                \item Complexidade $\mathcal{O}(d)$
+                \item Um único backward pass via VJP
+                \item Amostragem estocástica (Rademacher ou Gaussiano)
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Datasets}
+    \begin{enumerate}
+        \item \textbf{Dataset 2D Sintético}
+        \begin{itemize}
+            \item Three datasets: Two Moons, Two Circles, Spirals
+            \item 5000 amostras, ruído 0.05
+        \end{itemize}
+        \item \textbf{MNIST Reduzido}
+        \begin{itemize}
+            \item PCA: 784 → 100 componentes
+            \item Preserva ~95\% da variância
+        \end{itemize}
+        \item \textbf{MNIST Completo}
+        \begin{itemize}
+            \item 784 dimensões (28×28 pixels)
+            \item Preprocessing: Dequantização + Logit transform
+        \end{itemize}
+    \end{enumerate}
+\end{frame}
+
+% ===========================================
+% SECTION 3: MILESTONES
+% ===========================================
+\section{Milestones}
+
+\begin{frame}{Milestones do Projeto}
+    \begin{table}[hbt!]
+        \centering
+        \begin{tabular}{cccc}
+            \toprule
+            Milestones & Modelo & Dataset & Trace \\
+            \midrule
+            1 & NeuralODE & 2D Sintético & -- \\
+            2 & CNF & MNIST Reduzido & Exato \\
+            3 & FFJORD & MNIST Completo & Hutchinson \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\subsection{Milestone 1: Neural ODE}
+
+\begin{frame}{Milestone 1: Neural ODE - Arquitetura}
+    \begin{itemize}
+        \item \textbf{VectorField2D}: MLP de 2 camadas ocultas com embedding temporal
+        \item \textbf{NeuralODE}: Integra ODE de $t=0$ até $t=1$ usando \texttt{odeint}
+        \item Métodos:
+        \begin{itemize}
+            \item \texttt{forward()}: Integração $x(0) \to x(1)$
+            \item \texttt{backward()}: Integração $x(1) \to x(0)$
+        \end{itemize}
+        \item Treinamento via \textbf{loss de reversibilidade}:
+        \begin{equation*}
+            \mathcal{L} = \text{MSE}(\text{forward}(x_0), \text{backward}(x_1))
+        \end{equation*}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Milestone 1: Trajetórias Contínuas}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_moons_neuralode_trajectories.png}
+        \caption{Trajetórias para dataset \texttt{moons}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Trajetórias Contínuas}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_circles_neuralode_trajectories.png}
+        \caption{Trajetórias para dataset \texttt{circles}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Trajetórias Contínuas}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_spirals_neuralode_trajectories.png}
+        \caption{Trajetórias para dataset \texttt{spirals}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Campo Vetorial Aprendido}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_moons_neuralode_vector_fields.png}
+        \caption{Campo vetorial $f(x, t)$ para \texttt{moons} em $t \in [0, 0.5, 1]$}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Campo Vetorial Aprendido}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_circles_neuralode_vector_fields.png}
+        \caption{Campo vetorial $f(x, t)$ para \texttt{circles} em $t \in [0, 0.5, 1]$}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Campo Vetorial Aprendido}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_spirals_neuralode_vector_fields.png}
+        \caption{Campo vetorial $f(x, t)$ para \texttt{spirals} em $t \in [0, 0.5, 1]$}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Transformação $z \sim N(0,I) \to x$}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_moons_neuralode_transformation.png}
+        \caption{Transformação para dataset \texttt{moons}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Transformação $z \sim N(0,I) \to x$}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_circles_neuralode_transformation.png}
+        \caption{Transformação para dataset \texttt{circles}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Transformação $z \sim N(0,I) \to x$}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.9\textwidth]{imgs/01_spirals_neuralode_transformation.png}
+        \caption{Transformação para dataset \texttt{spirals}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 1: Animação de Trajetórias}
+    \begin{center}
+        \textbf{Trajetórias x(0) → x(1)}
+        \vspace{1cm}
+        
+        % Placeholder para GIFs - substituir pelos arquivos reais
+        \textcolor{gray}{\textit{[GIF: 01\_moons\_neuralode\_trajectories\_animation.gif]}}
+        
+        \vspace{0.5cm}
+        \textcolor{gray}{\textit{[GIF: 01\_circles\_neuralode\_trajectories\_animation.gif]}}
+        
+        \vspace{0.5cm}
+        \textcolor{gray}{\textit{[GIF: 01\_spirals\_neuralode\_trajectories\_animation.gif]}}
+    \end{center}
+    
+    \textit{Nota: Para incluir os GIFs, use o pacote \texttt{animate} ou converta para vídeo.}
+\end{frame}
+
+\subsection{Milestone 2: CNF}
+
+\begin{frame}{Milestone 2: CNF - Arquitetura}
+    \begin{itemize}
+        \item Estende NeuralODE para incluir cálculo de log-determinante
+        \item ODE aumentada integra simultaneamente:
+        \begin{align*}
+            \frac{dx}{dt} &= f(x, t) \\
+            \frac{d(\log \det)}{dt} &= -\trace\left(\frac{\partial f}{\partial x}\right)
+        \end{align*}
+        \item Métodos principais:
+        \begin{itemize}
+            \item \texttt{log\_prob()}: Calcula $\log p(x)$ via mudança de variáveis
+            \item \texttt{sample()}: Gera amostras via integração reversa
+        \end{itemize}
+        \item Treinamento via \textbf{negative log-likelihood} (NLL)
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Milestone 2: CNF vs RealNVP - Moons}
+    \begin{figure}
+        \centering
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_moons_cnf_transformation.png}
+            \caption{CNF}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_moons_realnvp_transformation.png}
+            \caption{RealNVP}
+        \end{subfigure}
+        \caption{Transformações aprendidas para dataset \texttt{moons}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 2: CNF vs RealNVP - Circles}
+    \begin{figure}
+        \centering
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_circles_cnf_transformation.png}
+            \caption{CNF}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_circles_realnvp_transformation.png}
+            \caption{RealNVP}
+        \end{subfigure}
+        \caption{Transformações aprendidas para dataset \texttt{circles}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 2: CNF vs RealNVP - Spirals}
+    \begin{figure}
+        \centering
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_spirals_cnf_transformation.png}
+            \caption{CNF}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{imgs/02_spirals_realnvp_transformation.png}
+            \caption{RealNVP}
+        \end{subfigure}
+        \caption{Transformações aprendidas para dataset \texttt{spirals}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Milestone 2: Resultados Comparativos}
+    \begin{table}[hbt!]
+        \centering
+        \resizebox{0.85\textwidth}{!}{
+            \begin{tabular}{cc|cccc}
+                \toprule
+                Dataset & Modelo & NFEs & Tempo/época (s) & Tempo amostragem (ms) & Log-likelihood \\
+                \midrule
+                Moons & CNF & 40 & 19.61 & 36 & -1.1067 \\ 
+                Moons & RealNVP & -- & 0.28 & 48 & -0.5785 \\ 
+                \midrule
+                Circles & CNF & 40 & 14.76 & 28.4 & -1.625 \\ 
+                Circles & RealNVP & -- & 0.29 & 1.6 & -1.1343 \\ 
+                \midrule
+                Spirals & CNF & 40 & 19.8 & 54.1 & -1.3429 \\ 
+                Spirals & RealNVP & -- & 0.43 & 1.3 & -0.6413 \\ 
+                \bottomrule
+            \end{tabular}
+        }
+    \end{table}
+    
+    \begin{itemize}
+        \item CNF: Mais custoso computacionalmente, resultados piores que RealNVP
+        \item Exceção: \texttt{Moons} onde CNF se saiu tão bem quanto RealNVP
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Milestone 2: MNIST Reduzido}
+    \begin{center}
+        \textcolor{gray}{\textit{[Resultados do MNIST Reduzido serão apresentados aqui]}}
+    \end{center}
+    \vspace{1cm}
+    \begin{itemize}
+        \item Dataset: MNIST com PCA (784 → 100 dimensões)
+        \item Modelo: CNF com trace exato
+        \item Métricas: Log-likelihood, tempo de treinamento, qualidade de amostras
+    \end{itemize}
+\end{frame}
+
+\subsection{Milestone 3: FFJORD}
+
+\begin{frame}{Milestone 3: FFJORD - Arquitetura}
+    \begin{itemize}
+        \item Extensão do CNF usando estimador Hutchinson
+        \item Reduz complexidade de $\mathcal{O}(d^2)$ para $\mathcal{O}(d)$
+        \item Permite treinamento em dados de alta dimensionalidade (784D)
+        \item Estrutura idêntica ao CNF, diferindo apenas no cálculo de trace
+        \item Parâmetros do estimador:
+        \begin{itemize}
+            \item \texttt{num\_samples}: Número de amostras estocásticas (tipicamente 1)
+            \item \texttt{distribution}: Rademacher ou Gaussiano
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Milestone 3: MNIST Completo}
+    \begin{center}
+        \textcolor{gray}{\textit{[Resultados do FFJORD no MNIST completo serão apresentados aqui]}}
+    \end{center}
+    \vspace{1cm}
+    \begin{itemize}
+        \item Dataset: MNIST completo (784 dimensões)
+        \item Modelo: FFJORD com estimador Hutchinson
+        \item Preprocessing: Dequantização + Logit transform
+        \item Métricas: Log-likelihood, qualidade de amostras geradas
+    \end{itemize}
+\end{frame}
+
+% ===========================================
+% SECTION 4: EXPERIMENTOS
+% ===========================================
+\section{Experimentos}
+
+\subsection{Experimento 1: Análise de NFEs}
+
+\begin{frame}{Experimento 1: Análise de NFEs}
+    \begin{table}[hbt!]
+        \centering
+        \resizebox{0.9\textwidth}{!}{
+            \begin{tabular}{cccc|ccc}
+                \toprule
+                Dataset & Solver & \texttt{rtol} & \texttt{atol} & NFEs & Tempo forward (ms) & Tempo backward (ms) \\
+                \midrule
+                \multirow{5}{*}{moons} & euler & -- & -- & 9 & 29.5 & 30.5 \\
+                & rk4 & -- & -- & 36 & 78.2 & 78.1 \\
+                & dopri5 & 1e-3 & 1e-4 & 56 & 31.4 & 32.0 \\
+                & dopri5 & 1e-4 & 1e-5 & 86 & 42.7 & 43.2 \\
+                & dopri5 & 1e-5 & 1e-6 & 122 & 56.6 & 59.2 \\
+                \midrule
+                \multirow{5}{*}{circles} & euler & -- & -- & 9 & 26.8 & 26.8 \\
+                & rk4 & -- & -- & 36 & 71.7 & 73.2 \\
+                & dopri5 & 1e-3 & 1e-4 & 50 & 31.4 & 42.0 \\
+                & dopri5 & 1e-4 & 1e-5 & 68 & 36.7 & 39.3 \\
+                & dopri5 & 1e-5 & 1e-6 & 110 & 58.9 & 61.0 \\
+                \bottomrule
+            \end{tabular}
+        }
+    \end{table}
+    
+    \textbf{Observações:}
+    \begin{itemize}
+        \item \texttt{dopri5} com menores tolerâncias gera maiores NFEs
+        \item \texttt{rk4} apresenta maior tempo computacional
+        \item \texttt{euler} é o mais rápido, mas menos preciso
+    \end{itemize}
+\end{frame}
+
+\subsection{Experimento 2: Regularizações}
+
+\begin{frame}{Experimento 2: Regularizações}
+    Regularizações testadas:
+    \begin{itemize}
+        \item \textbf{Kinetic Energy (KE)}: Penaliza velocidades altas ($\lambda_{KE}$)
+        \item \textbf{Jacobian Frobenius (JF)}: Penaliza Jacobiano complexo ($\lambda_{JF}$)
+    \end{itemize}
+    
+    Métricas avaliadas:
+    \begin{itemize}
+        \item \textbf{Log-Prob}: Log-likelihood final no conjunto de teste
+        \item \textbf{NFE}: Número de avaliações da função durante integração ODE
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Experimento 2: Resultados}
+    \begin{table}[hbt!]
+        \centering
+        \resizebox{0.85\textwidth}{!}{
+            \begin{tabular}{cc|cc|cc}
+                \toprule
+                $\lambda_{KE}$ & $\lambda_{JF}$ & Log-Prob & NFE & $\Delta$ Log-Prob & $\Delta$ NFE \\
+                \midrule
+                0.0 & 0.0 & 2.5159 & 724 & -- & -- \\
+                0.01 & 0.0 & 2.5709 & 364 & +0.0550 & -360 \\
+                0.0 & 0.01 & 2.6805 & 1024 & +0.1647 & +300 \\
+                0.01 & 0.01 & 2.7906 & 640 & +0.2748 & -84 \\
+                0.1 & 0.0 & 2.4474 & 496 & -0.0685 & -228 \\
+                0.0 & 0.1 & 2.7408 & 820 & +0.2249 & +96 \\
+                \rowcolor{green!20}
+                0.1 & 0.1 & \textbf{2.8477} & 688 & +0.3318 & -36 \\
+                \bottomrule
+            \end{tabular}
+        }
+    \end{table}
+    
+    \textbf{Melhor resultado:} $\lambda_{KE}=0.1, \lambda_{JF}=0.1$ com Log-Prob = 2.8477 (+0.3318)
+\end{frame}
+
+\begin{frame}{Experimento 2: Análise dos Resultados}
+    \begin{itemize}
+        \item \textbf{Melhor configuração}: $\lambda_{KE}=0.1, \lambda_{JF}=0.1$
+        \begin{itemize}
+            \item Log-Prob: 2.8477 (ganho de +0.3318)
+            \item NFE: 688 (redução de -36)
+        \end{itemize}
+        
+        \item \textbf{Menor NFE}: $\lambda_{KE}=0.01, \lambda_{JF}=0.0$
+        \begin{itemize}
+            \item NFE: 364 (redução de -360)
+            \item Log-Prob competitivo (+0.0550)
+        \end{itemize}
+        
+        \item \textbf{Regularização JF isolada}: Aumenta NFE significativamente (+300), mas melhora Log-Prob (+0.1647)
+        
+        \item \textbf{Combinação equilibrada}: $\lambda_{KE}=0.01, \lambda_{JF}=0.01$ oferece bom trade-off
+    \end{itemize}
+\end{frame}
+
+\subsection{Experimento 3: Arquiteturas}
+
+\begin{frame}{Experimento 3: Arquiteturas}
+    \begin{center}
+        \textcolor{gray}{\textit{[Resultados do Experimento 3 serão apresentados aqui]}}
+    \end{center}
+    \vspace{1cm}
+    \begin{itemize}
+        \item Análise de diferentes arquiteturas para VectorField
+        \item Comparação de performance e qualidade de amostras
+        \item Trade-offs entre complexidade e expressividade
+    \end{itemize}
+\end{frame}
+
+% ===========================================
+% SECTION 5: CONCLUSÕES
+% ===========================================
+\section{Conclusões}
+
+\begin{frame}{Conclusões}
+    \begin{itemize}
+        \item \textbf{Neural ODEs} demonstraram capacidade de aprender transformações contínuas e invertíveis
+        \item \textbf{CNFs} permitem modelagem generativa via máxima verossimilhança, mas são computacionalmente custosos
+        \item \textbf{FFJORD} resolve o problema de escalabilidade através do estimador Hutchinson
+        \item \textbf{Regularizações} melhoram significativamente a performance (KE + JF)
+        \item Trade-offs importantes entre precisão (NFEs) e velocidade computacional
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Desafios Encontrados}
+    \begin{itemize}
+        \item Complexidade computacional do cálculo exato de trace em altas dimensões
+        \item Escolha de solvers ODE e parâmetros (rtol, atol) para balancear precisão e velocidade
+        \item CNFs obtiveram resultados inferiores ao RealNVP em alguns datasets
+        \item Necessidade de tuning cuidadoso de regularizações
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Próximos Passos}
+    \begin{itemize}
+        \item Completar resultados do MNIST (Reduzido e Completo)
+        \item Finalizar Experimento 3 (Arquiteturas)
+        \item Análise mais profunda de trade-offs entre CNFs e discrete flows
+        \item Preparação para Flow Matching (Módulo 2)
+        \item Explorar técnicas avançadas de otimização para CNFs
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[plain]
+    \begin{center}
+        \Huge Obrigado!
+        \vspace{1cm}
+        
+        \large Perguntas?
+    \end{center}
+\end{frame}
+
+\end{document}
