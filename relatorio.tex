@@ -1,79 +1,63 @@
-\documentclass[12pt,a4paper]{article}
-
-% Pacotes essenciais
-\usepackage[utf8]{inputenc}
-\usepackage[portuguese]{babel}
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
 \usepackage{amsmath}
-\usepackage{amsfonts}
-\usepackage{amssymb}
-\usepackage{graphicx}
-\usepackage{hyperref}
+\usepackage[alf]{abntex2cite}
 \usepackage{listings}
-\usepackage{xcolor}
-\usepackage{float}
-\usepackage{geometry}
-\usepackage{booktabs}
-\usepackage{subcaption}
-\usepackage{algorithm}
-\usepackage{algorithmic}
-
-% Configurações de página
-\geometry{margin=2.5cm}
-
-% Configurações de código
-\lstset{
-    language=Python,
-    basicstyle=\ttfamily\small,
-    keywordstyle=\color{blue},
-    stringstyle=\color{red},
-    commentstyle=\color{green!60!black},
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    stepnumber=1,
-    numbersep=5pt,
-    frame=single,
-    breaklines=true,
-    showstringspaces=false
-}
-
-% Configurações de hyperref
+\usepackage{hyperref}
+%\usepackage{multicol}
 \hypersetup{
     colorlinks=true,
-    linkcolor=blue,
+    linkcolor=black,
     filecolor=magenta,      
-    urlcolor=cyan,
-    pdftitle={Mini-Projeto 1: Neural ODEs e Continuous Normalizing Flows},
-    pdfauthor={Seu Nome}
+    urlcolor=blue,
+    citecolor=black,
 }
+%\usepackage[numbers,sort&compress]{natbib} % for a numerical citation list
+\usepackage{natbib} % to cite references by surname and year
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{svg}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor} % Para cores na sintaxe
+\usepackage[brazil]{babel}
+\usepackage{float}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{lightgray!20}, % Cor de fundo suave
+    commentstyle=\color{green!70!black},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{gray},
+    stringstyle=\color{purple},
+    basicstyle=\ttfamily\footnotesize, % Fonte monoespaçada e tamanho
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left, % Números de linha à esquerda
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    language=Python % Define a linguagem padrão para Python
+}
+\lstset{style=mystyle} % Aplica o estilo globalmente
+\renewcommand{\lstlistingname}{Código}
 
-% Título
-\title{Mini-Projeto 1: Neural ODEs e Continuous Normalizing Flows}
-\author{Seu Nome \\ \small Curso/Instituição}
-\date{\today}
+\title{Relatório Mini Projeto 1 Flow}
+\author{Rafael Dias, Lucas Barbosa}
+\date{December 2025}
 
 \begin{document}
 
 \maketitle
 
-\begin{abstract}
-Este relatório apresenta a implementação e análise de Neural Ordinary Differential Equations (Neural ODEs) e Continuous Normalizing Flows (CNFs) usando a biblioteca \texttt{torchdiffeq}. Implementamos três componentes principais: (1) Neural ODE básico para aprendizado de transformações em dados 2D, (2) CNF com cálculo exato de trace para mudança de variáveis, e (3) FFJORD com estimador Hutchinson para escalabilidade em alta dimensão. Realizamos experimentos em datasets sintéticos 2D e MNIST, comparando diferentes solvers ODE, analisando trade-offs computacionais e avaliando a qualidade dos modelos gerados. Os resultados demonstram a expressividade dos CNFs, mas também evidenciam os desafios computacionais associados, especialmente o custo $\mathcal{O}(d^2)$ do trace exato versus $\mathcal{O}(d)$ do estimador Hutchinson.
-\end{abstract}
-
-\tableofcontents
-\newpage
-
 \section{Introdução}
-
-\subsection{Contexto e Motivação}
-
-Neural Ordinary Differential Equations (Neural ODEs) introduzidos por Chen et al. \cite{chen2018neural} representam uma abordagem inovadora para modelar transformações contínuas usando equações diferenciais ordinárias parametrizadas por redes neurais. Esta técnica permite modelar dinâmicas temporais de forma contínua, superando limitações de arquiteturas discretas tradicionais.
-
-Continuous Normalizing Flows (CNFs) estendem essa ideia para modelagem generativa, permitindo transformar uma distribuição base simples (como uma Gaussiana) em uma distribuição complexa de dados através de um fluxo contínuo. O trabalho seminal de Chen et al. \cite{chen2018ffjord} introduziu FFJORD, uma versão escalável de CNF que utiliza estimação estocástica de trace para reduzir a complexidade computacional de $\mathcal{O}(d^2)$ para $\mathcal{O}(d)$.
+Os Continuous Normalizing Flows (CNFs) têm se destacado como uma alternativa promissora aos modelos baseados em difusão, sobretudo por oferecerem uma formalização mais direta e explícita dos objetivos de geração. Avanços recentes nos principais modelos generativos utilizados na prática, como as atualizações recentes do software Midjourney, sugerem ganhos expressivos de eficiência decorrentes da adoção de métodos contínuos para a transformação de distribuições. Nesse contexto, este trabalho tem como propósito investigar diferentes abordagens de modelagem por CNFs, aplicando-as a problemas de complexidade reduzida. A intenção é identificar, de maneira sistemática, seus pontos fortes e limitações, contribuindo para uma compreensão mais ampla de seu potencial e de seus desafios frente a métodos mais consolidados.
 
 \subsection{Objetivos}
-
-Este projeto tem como objetivos:
-
+Este trabalho tem como objetivos:
 \begin{enumerate}
     \item Implementar Neural ODEs usando \texttt{torchdiffeq} para aprendizado de transformações em dados 2D
     \item Compreender e implementar Continuous Normalizing Flows com cálculo exato de trace
@@ -82,148 +66,20 @@ Este projeto tem como objetivos:
     \item Preparar-se conceitualmente para Flow Matching (Módulo 2)
 \end{enumerate}
 
-\subsection{Estrutura do Relatório}
-
-Este relatório está organizado da seguinte forma: Seção 2 apresenta os fundamentos teóricos; Seção 3 descreve a implementação; Seção 4 apresenta os experimentos e resultados; Seção 5 discute os achados; e Seção 6 conclui o trabalho.
-
-\section{Fundamentos Teóricos}
-
-\subsection{Neural Ordinary Differential Equations}
-
-Neural ODEs \cite{chen2018neural} modelam transformações contínuas através de equações diferenciais ordinárias:
-
-\begin{equation}
-\frac{dx(t)}{dt} = f_\theta(x(t), t)
-\end{equation}
-
-onde $f_\theta$ é uma rede neural parametrizada por $\theta$ que define o campo vetorial. A transformação de $x(0)$ para $x(1)$ é obtida através de integração numérica:
-
-\begin{equation}
-x(1) = x(0) + \int_0^1 f_\theta(x(t), t) dt
-\end{equation}
-
-A integração reversa é feita usando o método adjoint, permitindo backpropagation eficiente através do solver ODE.
-
-\subsection{Continuous Normalizing Flows}
-
-CNFs \cite{chen2018ffjord} estendem Neural ODEs para modelagem generativa usando a fórmula de mudança de variáveis. Para uma transformação invertível $z = \varphi(x)$:
-
-\begin{equation}
-\log p(x) = \log p(z) + \log \left|\det \frac{\partial \varphi}{\partial x}\right|
-\end{equation}
-
-Para CNF com $\varphi_t(x)$ integrando $\frac{dx}{dt} = f(x, t)$:
-
-\begin{equation}
-\log p(x) = \log p(z) + \int_0^1 \text{tr}\left(\frac{\partial f}{\partial x}\right) dt
-\end{equation}
-
-onde $z = \varphi_0(x)$ é obtido através de integração reversa.
-
-\subsection{FFJORD: Free-form Continuous Dynamics}
-
-FFJORD (Free-form Continuous Dynamics) \cite{chen2018ffjord} é uma extensão escalável de CNFs que resolve o problema de complexidade computacional do cálculo exato de trace. Enquanto CNFs com trace exato têm complexidade $\mathcal{O}(d^2)$ devido à necessidade de calcular cada elemento diagonal da matriz Jacobiana, FFJORD utiliza estimação estocástica de trace para reduzir essa complexidade para $\mathcal{O}(d)$.
-
-A principal inovação do FFJORD é a utilização do estimador Hutchinson para aproximar o trace da matriz Jacobiana. Isso permite que o modelo seja treinado eficientemente em dados de alta dimensionalidade, como imagens (por exemplo, MNIST com 784 dimensões), onde o cálculo exato seria computacionalmente proibitivo.
-
-Além da estimação de trace, FFJORD mantém todas as vantagens dos CNFs:
-\begin{itemize}
-    \item Transformações contínuas e invertíveis
-    \item Alta expressividade através de campos vetoriais livres (free-form)
-    \item Integração numérica adaptativa usando solvers ODE
-    \item Backpropagation eficiente através do método adjoint
-\end{itemize}
-
-A arquitetura do FFJORD é idêntica à de um CNF, diferindo apenas na forma como o trace é computado durante o treinamento. Isso torna FFJORD uma solução prática para aplicação de CNFs em problemas reais de alta dimensionalidade.
-
-\subsection{Cálculo de Trace}
-
-\subsubsection{Trace Exato}
-
-O cálculo exato do trace requer computar cada elemento diagonal da matriz Jacobiana:
-
-\begin{equation}
-\text{tr}\left(\frac{\partial f}{\partial x}\right) = \sum_{i=1}^d \frac{\partial f_i}{\partial x_i}
-\end{equation}
-
-Isso requer $d$ passes de backpropagation, resultando em complexidade $\mathcal{O}(d^2)$.
-
-\subsubsection{Estimador Hutchinson}
-
-O estimador Hutchinson utiliza a identidade:
-
-\begin{equation}
-\text{tr}(A) = \mathbb{E}_{\epsilon \sim p(\epsilon)}[\epsilon^T A \epsilon]
-\end{equation}
-
-onde $\epsilon$ é um vetor aleatório. Para $A = \frac{\partial f}{\partial x}$:
-
-\begin{equation}
-\text{tr}\left(\frac{\partial f}{\partial x}\right) \approx \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial f}{\partial x} \epsilon_i = \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial (f^T \epsilon_i)}{\partial x}
-\end{equation}
-
-Isso pode ser computado com um único backward pass usando vector-Jacobian product (VJP), reduzindo a complexidade para $\mathcal{O}(d)$.
-
-\section{Implementação}
-
-\subsection{Estrutura do Projeto}
-
-O projeto segue a seguinte estrutura:
-
-\begin{lstlisting}[language=bash]
-mini-project-1/
-├── src/
-│   ├── models/
-│   │   ├── vector_field.py      # Arquiteturas VectorField2D
-│   │   ├── neural_ode.py        # Neural ODE básico
-│   │   ├── cnf.py               # CNF com trace exato
-│   │   └── ffjord.py            # FFJORD com Hutchinson
-│   ├── utils/
-│   │   ├── datasets.py          # Data loading
-│   │   ├── training.py          # Training loops
-│   │   ├── trace.py             # Trace computation
-│   │   └── visualization.py    # Plotting
-│   └── experiments/
-│       ├── exp1_ode_solvers.py
-│       ├── exp2_regularization.py
-│       └── exp3_architectures.py
-├── notebooks/
-│   ├── 01_neural_ode_2d.ipynb
-│   ├── 02_cnf_trace_comparison.ipynb
-│   └── 03_ffjord_mnist.ipynb
-└── results/
-    ├── figures/
-    └── checkpoints/
-\end{lstlisting}
-
+\section{Modelos}
 \subsection{Vector Field}
-
-O \texttt{VectorField2D} parametriza $\frac{dx}{dt} = f(x, t)$ usando uma rede neural. Implementamos:
-
-\begin{itemize}
-    \item \textbf{Time Embedding}: Codificação senoidal do tempo
-    \item \textbf{MLP}: Rede feedforward simples ou com skip connections
-    \item \textbf{Inicialização}: Última camada com pesos pequenos ($\sigma = 0.01$)
-\end{itemize}
-
-\subsubsection{Time Embedding}
-
-Uma das características fundamentais dos Neural ODEs é a dependência temporal explícita do campo vetorial $f(x, t)$. Para permitir que a rede neural processe adequadamente o tempo $t$, utilizamos uma codificação senoidal posicional (positional encoding), inspirada nos Transformers \cite{vaswani2017attention}.
-
-O time embedding transforma o escalar temporal $t \in [0, 1]$ em um vetor de dimensão $d_{emb}$ através de funções senoidais com frequências diferentes. Para uma dimensão de embedding $d_{emb}$, calculamos:
+O cerne de todos os modelos descritos no trabalho consiste no modelo \texttt{VectorField}, que simplesmente aproxima o campo vetorial de velocidades $\dot{x}=f_\theta(x,t)$ parametrizado por uma rede neural. Neste trabalho, a rede utilizada é uma MLP simples de 2 camadas ocultas e função de ativação $\tanh$. O modelo concatena a entrada $x$ com um embedding do tempo, que transforma o escalar temporal $t \in [0, 1]$ em um vetor de dimensão $d_{emb}$ através de funções senoidais com frequências diferentes. Para uma dimensão de embedding $d_{emb}$, calculamos:
 
 \begin{equation}
-\text{PE}_{2i}(t) = \sin\left(\frac{t}{10000^{2i/d_{emb}}}\right)
+    \text{PE}_{2i}(t) = \sin\left(\frac{t}{10000^{2i/d_{emb}}}\right)
 \end{equation}
 
 \begin{equation}
-\text{PE}_{2i+1}(t) = \cos\left(\frac{t}{10000^{2i/d_{emb}}}\right)
+    \text{PE}_{2i+1}(t) = \cos\left(\frac{t}{10000^{2i/d_{emb}}}\right)
 \end{equation}
-
 onde $i \in \{0, 1, \ldots, d_{emb}/2 - 1\}$ e $10000$ é uma constante de escala. O vetor de embedding final é a concatenação:
-
 \begin{equation}
-t_{emb} = [\text{PE}_0(t), \text{PE}_1(t), \ldots, \text{PE}_{d_{emb}-1}(t)]
+    t_{emb} = [\text{PE}_0(t), \text{PE}_1(t), \ldots, \text{PE}_{d_{emb}-1}(t)]
 \end{equation}
 
 Esta codificação possui várias vantagens:
@@ -243,60 +99,51 @@ f(x, t) = \text{MLP}([x, t_{emb}])
 Utilizamos $d_{emb} = 16$ para dados 2D e $d_{emb} = 32$ para MNIST, balanceando expressividade e eficiência computacional.
 
 \subsection{Neural ODE}
+A metodologia adotada baseia-se no emprego de \textit{Neural Ordinary Differential Equations} (\texttt{NeuralODE}) \cite{chen2018neural} para aprender um campo vetorial contínuo capaz de transformar distribuições simples em distribuições alvo. O treinamento foi conduzido por meio de uma função de custo tradicional de regressão, utilizando o erro quadrático médio (MSE) entre a posição prevista pelo modelo e a posição objetivo. O NeuralODE integra o campo de velocidades estimado pello VF da forma:
 
-O \texttt{NeuralODE} integra o campo vetorial de $t=0$ até $t=1$ usando \texttt{odeint} do \texttt{torchdiffeq}, suportando múltiplos solvers (euler, rk4, dopri5).
+\begin{equation}
+    \phi(x,t) = \int_{0}^tf(x,s)ds
+\end{equation}
 
-\subsection{CNF com Trace Exato}
+Onde para cada iteração de treinamento, amostras de tempo $t$ equidistantes no intervalo $[0, 1]$, permitindo que o modelo aprendesse a dinâmica da transformação em múltiplos estágios do fluxo contínuo. De forma análoga, as condições iniciais $x_0$ foram amostradas aleatoriamente de uma distribuição gaussiana. A posição intermediária $x_t$ utilizada como alvo supervisionado foi estimada por uma interpolação linear entre o ponto inicial $x_0$ e o ponto final $x_1$ da distribuição-alvo. Essa aproximação, embora simples, fornece ao modelo um gradiente útil ao longo de diferentes tempos, evitando a necessidade de integrações completas durante as etapas iniciais de treinamento.
 
-Implementamos \texttt{divergence\_exact} que calcula o trace exato iterando sobre cada dimensão:
+A entrada passada ao modelo consiste nos pares $(x_0, t)$, e o Neural ODE é responsável por prever a evolução do sistema a partir do campo vetorial aprendido. Esse procedimento possibilita treinar o modelo simultaneamente para diferentes valores de $t$, promovendo maior estabilidade e facilitando a aprendizagem da dinâmica temporal.
 
-\begin{lstlisting}[language=Python]
-def divergence_exact(f, x):
-    batch_size, dim = x.shape
-    trace = torch.zeros(batch_size, device=device)
-    for i in range(dim):
-        df_i = torch.autograd.grad(
-            f[:, i].sum(), x, 
-            create_graph=True, 
-            retain_graph=True
-        )[0]
-        trace += df_i[:, i]
-    return trace
-\end{lstlisting}
+\subsection{Continuous Normalizing Flows}
+CNFs estendem Neural ODEs para modelagem generativa usando a fórmula de mudança de variáveis \cite{papamakarios2021normalizing}. Para uma transformação invertível $z = \varphi(x)$:
 
-O CNF integra dinâmicas aumentadas $[x, \log\det]$ onde $\frac{d\log\det}{dt} = -\text{tr}\left(\frac{\partial f}{\partial x}\right)$.
+\begin{equation}
+    \log p(x) = \log p(z) + \log \left|\det \frac{\partial \varphi}{\partial x}\right|
+\end{equation}
 
-\subsection{FFJORD com Hutchinson}
+Para CNF com $\varphi_t(x)$ integrando $\frac{dx}{dt} = f(x, t)$:
 
-FFJORD utiliza o estimador Hutchinson para reduzir a complexidade:
+\begin{equation}
+    \log p(x) = \log p(z) + \int_0^1 \text{tr}\left(\frac{\partial f}{\partial x}\right) dt
+\end{equation}
 
-\begin{lstlisting}[language=Python]
-def hutchinson_trace_estimator(f, x, n_samples=1, noise='rademacher'):
-    trace = torch.zeros(x.shape[0], device=device)
-    for _ in range(n_samples):
-        if noise == 'rademacher':
-            epsilon = torch.randint(0, 2, x.shape, device=device) * 2 - 1
-        else:  # gaussian
-            epsilon = torch.randn_like(x)
-        
-        vjp = torch.autograd.grad(
-            f(x).sum(), x, 
-            grad_outputs=epsilon,
-            create_graph=True,
-            retain_graph=True
-        )[0]
-        trace += (epsilon * vjp).sum(-1)
-    return trace / n_samples
-\end{lstlisting}
+onde $z = \varphi_0(x)$ é obtido através de integração reversa. O traço garante a inversibilidade da função, fazendo com que o caminho de $x(0)$ para $x(1)$ (amostrado) seja o mesmo que o caminho de $x(1)$ para $x(0)$ (gerado).
+
+\subsection{FFJORD}
+FFJORD (Free-form Continuous Dynamics) \cite{grathwohl2018ffjord} é uma extensão escalável de CNFs que resolve o problema de complexidade computacional do cálculo exato de trace. Enquanto CNFs com trace exato têm complexidade $\mathcal{O}(d^2)$ devido à necessidade de calcular cada elemento diagonal da matriz Jacobiana, FFJORD utiliza estimação estocástica de trace para reduzir essa complexidade para $\mathcal{O}(d)$.
+
+A principal inovação do FFJORD é a utilização do estimador Hutchinson para aproximar o trace da matriz Jacobiana. Isso permite que o modelo seja treinado eficientemente em dados de alta dimensionalidade, como imagens (por exemplo, MNIST com 784 dimensões), onde o cálculo exato seria computacionalmente proibitivo.
+
+Além da estimação de trace, FFJORD mantém todas as vantagens dos CNFs:
+\begin{itemize}
+    \item Transformações contínuas e invertíveis.
+    \item Alta expressividade através de campos vetoriais livres.
+    \item Integração numérica adaptativa usando solvers ODE.
+    \item Backpropagation eficiente através do método adjunto.
+\end{itemize}
+
+A arquitetura do FFJORD é idêntica à de um CNF, diferindo apenas na forma como o trace é computado durante o treinamento. Isso torna FFJORD uma solução prática para aplicação de CNFs em problemas reais de alta dimensionalidade.
 
 \section{Datasets}
-
 Este projeto utiliza três tipos de datasets para avaliar os modelos em diferentes níveis de complexidade e dimensionalidade. Cada dataset foi escolhido para demonstrar aspectos específicos dos Neural ODEs e CNFs.
 
 \subsection{Dataset 2D Sintético}
-
 Utilizamos datasets sintéticos bidimensionais para visualização e análise qualitativa dos modelos. O dataset principal é o \texttt{Synthetic2D}, que suporta três tipos de distribuições:
-
 \begin{itemize}
     \item \textbf{Two Moons}: Distribuição em formato de duas luas entrelaçadas, gerada usando \texttt{sklearn.datasets.make\_moons}
     \item \textbf{Two Circles}: Distribuição de dois círculos concêntricos, gerada usando \texttt{sklearn.datasets.make\_circles}
@@ -320,9 +167,7 @@ Este dataset é ideal para:
 \end{itemize}
 
 \subsection{MNIST Reduzido}
-
 O \texttt{MNISTReduced} aplica Análise de Componentes Principais (PCA) ao dataset MNIST original para reduzir a dimensionalidade de 784 para 100 componentes principais. Esta redução permite:
-
 \begin{itemize}
     \item Testar CNFs com trace exato em dimensões intermediárias (100D)
     \item Comparar a escalabilidade entre trace exato e estimador Hutchinson
@@ -342,13 +187,9 @@ O \texttt{MNISTReduced} aplica Análise de Componentes Principais (PCA) ao datas
 O PCA é aplicado no conjunto de treino e os mesmos componentes são usados para transformar o conjunto de teste, garantindo consistência. Esta abordagem preserva aproximadamente 95\% da variância dos dados originais, mantendo a informação visual relevante enquanto reduz significativamente a complexidade computacional.
 
 \subsection{MNIST Completo}
-
 O \texttt{MNISTComplete} utiliza o dataset MNIST em sua dimensionalidade completa (784 dimensões) com preprocessing adequado para normalizing flows. Este é o dataset utilizado para treinar o FFJORD com estimador Hutchinson.
-
 \textbf{Preprocessamento}:
-
 O preprocessing é crucial para normalizing flows, pois os dados devem estar em um espaço contínuo e não-degenerado. Implementamos um pipeline de três etapas:
-
 \begin{enumerate}
     \item \textbf{Dequantização}: Transforma valores discretos $\{0, 1, \ldots, 255\}$ em contínuos $(0, 256)$ através da adição de ruído uniforme:
     \begin{equation}
@@ -376,462 +217,911 @@ O preprocessing é crucial para normalizing flows, pois os dados devem estar em 
 
 Este dataset é utilizado exclusivamente com FFJORD devido à necessidade do estimador Hutchinson para escalabilidade. O cálculo exato de trace seria computacionalmente proibitivo em 784 dimensões, demonstrando claramente a importância da estimação estocástica.
 
-\subsection{Resumo Comparativo}
+\section{Cálculo de Trace}
+\subsection{Trace Exato}
+O cálculo exato do trace requer computar cada elemento diagonal da matriz Jacobiana:
+\begin{equation}
+    \text{tr}\left(\frac{\partial f}{\partial x}\right) = \sum_{i=1}^d \frac{\partial f_i}{\partial x_i}
+\end{equation}
+Isso requer $d$ passes de backpropagation, resultando em complexidade $\mathcal{O}(d^2)$.
+A implementação utiliza gradientes batched para computar a Jacobiana completa de uma vez, extraindo o trace via einsum:
 
-\begin{table}[H]
+% \begin{lstlisting}[language=Python, caption=Implementação do cálculo exato de trace, label=code:trace_exact]
+% def divergence_exact(
+%     f: Callable[[torch.Tensor], torch.Tensor],
+%     x: torch.Tensor,
+% ) -> torch.Tensor:
+%     """Calculate trace(∂f/∂x) exactly using autograd.
+
+%     WARNING: Cost O(d²) - only viable for low dimensions!
+%     For high dimensions (d > 50), consider using divergence_hutchinson.
+
+%     Optimized implementation: computes the full Jacobian at once using
+%     batched gradients, then extracts the trace via einsum.
+
+%     Args:
+%         f (Callable[[torch.Tensor], torch.Tensor]): Function R^d -> R^d
+%             that accepts x and returns (batch, d).
+
+%         x (torch.Tensor): Input tensor with shape (batch, d).
+
+%     Returns:
+%         torch.Tensor: Trace of the Jacobian with shape (batch,).
+%     """
+%     # Create identity matrix for batched gradient computation
+%     identity = torch.eye(x.shape[-1], dtype=torch.float64, device=device)
+%     grad_outputs = identity.expand(*x.shape, -1).movedim(-1, 0)
+%     # grad_outputs shape: (dim, batch, dim)
+
+%     if not x.requires_grad:
+%         x = x.clone().requires_grad_(True)
+
+%     f_x = f(x)  # (batch, dim)
+
+%     # Compute full Jacobian using batched gradients
+%     (jacobian,) = torch.autograd.grad(
+%         f_x,
+%         x,
+%         grad_outputs,
+%         create_graph=True,
+%         is_grads_batched=True
+%     )  # (dim, batch, dim)
+
+%     # Extract trace: sum over diagonal elements
+%     trace = torch.einsum("i...i", jacobian)  # (batch,)
+%     return trace
+% \end{lstlisting}
+
+\subsection{Estimador Hutchinson}
+O estimador Hutchinson \cite{hutchinson1989stochastic} utiliza a identidade:
+\begin{equation}
+    \text{tr}(A) = \mathbb{E}_{\epsilon \sim p(\epsilon)}[\epsilon^T A \epsilon]
+\end{equation}
+onde $\epsilon$ é um vetor aleatório. Para $A = \frac{\partial f}{\partial x}$:
+\begin{equation}
+    \text{tr}\left(\frac{\partial f}{\partial x}\right) \approx \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial f}{\partial x} \epsilon_i = \frac{1}{n}\sum_{i=1}^n \epsilon_i^T \frac{\partial (f^T \epsilon_i)}{\partial x}
+\end{equation}
+Isso pode ser computado com um único backward pass usando vector-Jacobian product (VJP), reduzindo a complexidade para $\mathcal{O}(d)$.
+
+A implementação utiliza amostragem estocástica de vetores $\epsilon$ (Rademacher ou Gaussiano) para estimar o trace:
+
+% \begin{lstlisting}[language=Python, caption=Implementação do estimador Hutchinson para cálculo de trace, label=code:trace_hutchinson]
+% def divergence_hutchinson(
+%     f: Callable[[torch.Tensor], torch.Tensor],
+%     x: torch.Tensor,
+%     num_samples: int = 1,
+%     distribution: Literal['rademacher', 'gaussian'] = 'rademacher'
+% ) -> torch.Tensor:
+%     """Calculate trace(∂f/∂x) using Hutchinson estimator.
+
+%     Cost O(d) - scalable for high dimensions!
+
+%     Args:
+%         f: Function R^d -> R^d (callable that accepts x and returns
+%             (batch, d)).
+
+%         x: Input tensor with shape (batch, d).
+
+%         num_samples: Number of samples for estimation (default: 1).
+
+%         distribution: 'rademacher' or 'gaussian'.
+
+%     Returns:
+%         trace: Trace estimate with shape (batch,).
+%     """
+%     batch_size, dim = x.shape
+
+%     # Enable gradients if not already enabled
+%     # Use clone if x doesn't require grad to ensure proper graph connection
+%     if not x.requires_grad:
+%         x = x.clone().requires_grad_(True)
+%     else:
+%         x = x.requires_grad_(True)
+
+%     # Compute f(x)
+%     f_x = f(x)  # (batch, dim)
+
+%     trace_estimates = []
+
+%     for _ in range(num_samples):
+%         # Sample noise vector
+%         if distribution == 'rademacher':
+%             # Rademacher: ε ~ Uniform({-1, +1})
+%             epsilon = (
+%                 torch.randint(0, 2, (batch_size, dim), device=device,
+%                               dtype=torch.float64) * 2 - 1
+%             )
+%         elif distribution == 'gaussian':
+%             # Gaussian: ε ~ N(0, I)
+%             epsilon = torch.randn(
+%                 batch_size, dim, device=device, dtype=torch.float64
+%             )
+
+%         # Compute ε^T * f(x)
+%         vTf = (epsilon * f_x).sum(dim=-1)  # (batch,)
+
+%         # Compute gradient: ∂(ε^T * f(x))/∂x = ε^T * ∂f/∂x
+%         grad_vTf = autograd.grad(
+%             vTf.sum(),
+%             x,
+%             create_graph=True,
+%             retain_graph=True
+%         )[0]  # (batch, dim)
+
+%         # Hutchinson estimator: ε^T * (∂f/∂x) * ε
+%         trace_est = (epsilon * grad_vTf).sum(dim=-1)  # (batch,)
+%         trace_estimates.append(trace_est)
+
+%     # Average over samples
+%     trace = torch.stack(trace_estimates, dim=0).mean(dim=0)  # (batch,)
+
+%     return trace
+% \end{lstlisting}
+
+\section{Milestones}
+O projeto foi dividido em 3 Milestones, descritas na Tabela \ref{tab:milestones}:
+
+\begin{table}[hbt!]
     \centering
-    \begin{tabular}{lccc}
-        \toprule
-        Dataset & Dimensão & Uso Principal & Trace \\
-        \midrule
-        2D Sintético & 2 & Visualização, Debug & Exato \\
-        MNIST Reduzido & 100 & Comparação escalabilidade & Exato/Hutchinson \\
-        MNIST Completo & 784 & Produção, FFJORD & Hutchinson \\
-        \bottomrule
+    \begin{tabular}{cccc}
+        \hline
+        Milestones & Modelo & Dataset & Trace \\
+        \hline
+        1 & NeuralODE & 2D Sintético & - \\
+        2 & CNF & MNIST Reduzido & Exato \\
+        3 & FFJORD & MNIST Completo & Hutchinson \\
+        \hline
     \end{tabular}
-    \caption{Comparação dos datasets utilizados}
+    \caption{Descrição das Milestones}
+    \label{tab:milestones}
 \end{table}
 
-\section{Experimentos e Resultados}
+\subsection{Milestone 1}
+Nessa milestone, foi utilizado os modelos \texttt{VectorField} e \texttt{NeuralODE} para geração de amostras do dataset sintético 2D, contendo os datasets \texttt{Moons}, \texttt{Circles} e \texttt{Spirals}. O modelo aplica integração através da função \texttt{odeint} da biblioteca \texttt{torchdiffeq}.
 
-\subsection{Milestone 1: Neural ODE Básico}
+O modelo \texttt{VectorField} é composto pelos componentes:
 
-O objetivo deste milestone é implementar e analisar um Neural ODE básico para aprendizado de transformações contínuas em dados bidimensionais. Este milestone serve como base para compreender os conceitos fundamentais antes de avançar para CNFs e FFJORD.
+\begin{itemize}
+    \item \texttt{\_\_init\_\_}:
+    \begin{lstlisting}[language=Python, caption=\texttt{\_\_init\_\_} do modelo VF, label=code:vf_init]
+    class VectorField2D(nn.Module):
+    """Parametrizes dx/dt = f(x, t) using a neural network."""
+    def __init__(
+        self,
+        features: int,
+        hidden_dims: list[int] = [64, 64],
+        time_embed_dim: int = 16
+    ) -> None:
+        """Initialize the VectorField2D.
 
-\subsubsection{Dataset e Configuração}
+        Args:
+            features (int): Data dimension.
 
-Utilizamos o dataset 2D sintético do tipo "moons" conforme descrito na Seção 4, com 5000 amostras e ruído 0.05. Este dataset é ideal para visualização direta das transformações aprendidas pelo modelo.
+            hidden_dims (list, optional): Hidden dimensions.
+                Default is [64, 64].
 
-\subsubsection{Hiperparâmetros e Arquitetura}
+            time_embed_dim (int, optional): Time embedding dimension.
+                Default is 16.
+        """
+        super().__init__()
+        self.features = features
+        self.time_embed_dim = time_embed_dim
 
-A configuração completa do modelo e treinamento é apresentada na Tabela~\ref{tab:milestone1_hyperparams}.
+        # Build MLP
+        dims = [features + time_embed_dim] + hidden_dims + [features]
+        layers = []
+        for i in range(len(dims) - 1):
+            layers.append(
+                nn.Linear(
+                    dims[i],
+                    dims[i + 1],
+                    dtype=torch.float64
+                )
+            )
+            if i < len(dims) - 2:  # No activation on last layer
+                layers.append(nn.Tanh())
 
-\begin{table}[H]
+        self.net = nn.Sequential(*layers)
+
+        # Initialization: last layer with small weights (σ=0.01)
+        nn.init.normal_(self.net[-1].weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.net[-1].bias)
+    \end{lstlisting}
+    \item Método \texttt{time\_embedding}:
+    \begin{lstlisting}[language=Python, caption=Embedding de tempo no modelo \texttt{VectorField}, label=code:vf_time_embedding]
+    def time_embedding(self, t: torch.Tensor) -> torch.Tensor:
+        """Sinusoidal time embedding.
+        Args:
+            t (torch.Tensor): Time tensor with shape [batch] or [batch, 1]
+                or scalar.
+    
+        Returns:
+            embedded (torch.Tensor): Embedded time tensor with shape
+                [batch, time_embed_dim].
+        """
+        # Handle scalar
+        if t.dim() == 0:
+            t = t.unsqueeze(0)
+    
+        # Handle 2D tensor with shape [batch, 1]
+        elif t.dim() == 2 and t.shape[1] == 1:
+            t = t[:, 0]
+    
+        # Ensure 1D tensor
+        elif t.dim() != 1:
+            raise ValueError(
+                f"Time tensor must have shape [batch, ], got {t.shape}"
+            )
+    
+        # t_emb[2i] = sin(t / 10000^(2i/d))
+        # t_emb[2i+1] = cos(t / 10000^(2i/d))
+        half = self.time_embed_dim // 2
+        # Standard positional encoding: 10000^(2i/d_model)
+        # For i in [0, half-1], compute 10000^(-2i/d_model)
+        i = torch.arange(0, half, dtype=torch.float64, device=t.device)
+        freqs = torch.exp(-i * 2.0 * math.log(10000.0) / self.time_embed_dim)
+        return torch.cat([
+            torch.sin(t.unsqueeze(-1) * freqs),
+            torch.cos(t.unsqueeze(-1) * freqs)
+        ], dim=-1)
+    \end{lstlisting}
+    \item Método \texttt{forward}:
+    \begin{lstlisting}[language=Python, caption=Forward pass do modelo \texttt{VectorField}, label=code:vf_forward]
+        # Concatenate [x, t_emb]
+        x_t = torch.cat([x, t_emb], dim=-1)
+    
+        # Pass through the network
+        dx_dt = self.net(x_t)
+    \end{lstlisting}
+\end{itemize}
+
+Já o modelo \texttt{NeuralODE}: 
+\begin{itemize}
+    \item \texttt{\_\_init\_\_}:
+    \begin{lstlisting}[language=Python, caption=\texttt{\_\_init\_\_} do modelo \texttt{NeuralODE}, label=code:neural_ode_init]
+    class NeuralODE(nn.Module):
+        """Neural ODE: integrates dx/dt = f(x,t) from t=0 to t=1."""
+        def __init__(
+            self,
+            vector_field: VectorField2D,
+            solver: Literal['euler', 'rk4', 'dopri5'] = 'dopri5',
+            rtol: float = 1e-3,
+            atol: float = 1e-4,
+        ) -> None:
+            """Initialize NeuralODE."""
+            super().__init__()
+            self.vf = vector_field
+            self.solver = solver
+            self.rtol = rtol
+            self.atol = atol
+    \end{lstlisting}
+    \item Método \texttt{forward} que integra de t=0 até t=1:
+    \begin{lstlisting}[language=Python, caption=Método \texttt{forward} do modelo \texttt{NeuralODE}, label=code:neural_ode_forward]
+    def forward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 100,
+    ) -> torch.Tensor:
+        """Integrate ODE from t=0 (x) to t=1 (z)."""
+        # Create t_span with shape (n_steps, 1)
+        t_span = torch.linspace(
+            0., 1.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+
+        x_t = odeint(
+            self.vf,
+            x,
+            t_span,
+            method=self.solver,
+            rtol=self.rtol,
+            atol=self.atol
+        )
+        return x_t
+    \end{lstlisting}
+    \item Método \texttt{backward} que integra de t=1 até t=0:
+    \begin{lstlisting}[language=Python, caption=Método \texttt{backward} do modelo \texttt{NeuralODE}, label=code:neural_ode_backward]
+    def backward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 100,
+    ) -> torch.Tensor:
+        """Integrate ODE from t=1 to t=0."""
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+        x_t = odeint(
+            self.vf,
+            x,
+            t_span,
+            method=self.solver,
+            rtol=self.rtol,
+            atol=self.atol
+        )
+        return x_t
+    \end{lstlisting}
+\end{itemize}
+
+O treinamento do modelo \texttt{NeuralODE} é realizado através da função \texttt{train\_neural\_ode}, que utiliza uma função de perda baseada em reversibilidade. A estratégia consiste em garantir que a transformação forward seguida de backward retorne ao estado original:
+
+\begin{lstlisting}[language=Python, caption=Função de treinamento do NeuralODE, label=code:train_neural_ode]
+def train_neural_ode(
+    model: NeuralODE,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    n_epochs: int = 100,
+    n_steps: int = 100,
+    n_samples: int = 25,
+) -> None:
+    """Train Neural ODE using reversibility loss.
+    
+    The loss ensures that forward followed by backward 
+    returns to original state.
+    """
+    model.train()
+
+    for epoch in range(n_epochs):
+        total_loss = 0.0
+        n_batches = 0
+
+        for x0_target in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
+            optimizer.zero_grad()
+            batch_size = x0_target.shape[0]
+            features = x0_target.shape[1]
+
+            # 1. Forward trajectory: x0_target → x1_pred
+            x0_target = x0_target.to(device)
+            forward_x_t = model(x0_target, n_steps)
+            forward_x_t = forward_x_t.permute(1, 2, 0)
+
+            # 2. Backward trajectory: x1_target → x0_pred
+            x1_target = torch.randn_like(x0_target)
+            backward_x_t = model.backward(x1_target, n_steps)
+            backward_x_t = torch.flip(backward_x_t, dims=[0])
+            backward_x_t = backward_x_t.permute(1, 2, 0)
+
+            # Sample n_samples time points for each trajectory
+            time_indices = torch.linspace(
+                0, n_steps - 1, n_samples,
+                dtype=torch.long,
+                device=x0_target.device
+            ).unsqueeze(0).expand(batch_size, n_samples)
+
+            # Sample forward and backward states
+            batch_indices = torch.arange(
+                batch_size, device=x0_target.device
+            ).unsqueeze(1)
+
+            sample_forward = forward_x_t[
+                batch_indices, :, time_indices
+            ]
+            sample_forward = sample_forward.permute(0, 2, 1)
+            sample_forward = sample_forward.reshape(-1, features)
+
+            sample_backward = backward_x_t[
+                batch_indices, :, time_indices
+            ]
+            sample_backward = sample_backward.permute(0, 2, 1)
+            sample_backward = sample_backward.reshape(-1, features)
+
+            # Reversibility loss: MSE between forward and backward
+            loss = ((sample_forward - sample_backward) ** 2).mean()
+
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+            n_batches += 1
+
+        avg_loss = total_loss / n_batches
+        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}")
+
+    return avg_loss
+\end{lstlisting}
+
+A função de perda utilizada é baseada em reversibilidade: amostramos pontos ao longo das trajetórias forward e backward e minimizamos o erro quadrático médio entre estados correspondentes. Esta abordagem garante que o modelo aprenda transformações invertíveis, essenciais para normalizing flows.
+
+\subsection{Milestone 2}
+Nessa milestone, foi implementado um \texttt{Continuous Normalizing Flow} (CNF) com cálculo exato de trace para modelagem generativa no dataset MNIST reduzido (100 dimensões após PCA). O CNF estende o NeuralODE para incluir o cálculo do log-determinante através da fórmula de mudança de variáveis, permitindo calcular a log-probabilidade dos dados e treinar o modelo via máxima verossimilhança.
+
+O modelo \texttt{CNF} é composto pelos seguintes componentes:
+
+\begin{itemize}
+    \item \texttt{\_\_init\_\_}: Inicializa o CNF com um campo vetorial e uma distribuição base (por padrão, Gaussiana multivariada $N(0, I)$). O parâmetro \texttt{trace\_scale} permite escalar o trace para estabilidade numérica.
+    \begin{lstlisting}[language=Python, caption=\texttt{\_\_init\_\_} do modelo CNF, label=code:cnf_init]
+    class CNF(nn.Module):
+        """Continuous Normalizing Flow with exact trace computation."""
+        def __init__(
+            self,
+            vector_field: VectorField2D,
+            base_dist: Optional[Distribution] = None,
+            trace_scale: float = 1e-2
+        ) -> None:
+            """Initialize CNF."""
+            super().__init__()
+            self.vf = vector_field
+            self.trace_scale = trace_scale
+            if base_dist is None:
+                # Prior: N(0, I)
+                features = vector_field.features
+                self.base_dist = torch.distributions.MultivariateNormal(
+                    torch.zeros(features, device=device),
+                    torch.eye(features, device=device)
+                )
+            else:
+                self.base_dist = base_dist
+        \end{lstlisting}
+    
+    \item Método \texttt{\_augmented\_dynamics}: Implementa a ODE aumentada que integra simultaneamente o estado $x$ e o log-determinante. A derivada do log-determinante é calculada através do trace negativo da matriz Jacobiana: $\frac{d(\log \det)}{dt} = -\text{tr}\left(\frac{\partial f}{\partial x}\right)$.
+    \begin{lstlisting}[language=Python, caption=ODE aumentada do CNF, label=code:cnf_augmented]
+    def _augmented_dynamics(
+        self,
+        t: torch.Tensor,
+        state: torch.Tensor
+    ) -> torch.Tensor:
+        """Augmented ODE: integrates [x, log_det] simultaneously.
+        
+        dx/dt = f(x, t)
+        d(log_det)/dt = -trace(∂f/∂x)
+        """
+        x = state[:, :-1]  # (batch, features)
+        
+        x = x.requires_grad_(True)
+        
+        # Compute vector field
+        dx_dt = self.vf(t, x)
+        
+        # Compute trace of the Jacobian using exact method
+        with torch.enable_grad():
+            trace = divergence_exact(
+                lambda x_: self.vf(t, x_),
+                x,
+            )
+        
+        # Apply scale factor
+        trace = trace * self.trace_scale
+        
+        # Compute log determinant derivative
+        dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
+        
+        return torch.cat([dx_dt, dlogdet_dt], dim=-1)
+        \end{lstlisting}
+
+    \newpage
+    \item Método \texttt{forward}:
+    \begin{lstlisting}[language=Python, caption=Método \texttt{forward} do CNF, label=code:cnf_forward]
+    def forward(
+        self,
+        x: torch.Tensor,
+        n_steps: int = 10,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Transform x -> z (forward) or z -> x (reverse)."""
+        t_span = torch.linspace(
+            0., 1.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+        
+        log_det_init = torch.zeros(
+            x.shape[0], 1,
+            device=device,
+            dtype=torch.float64,
+        )
+        state_init = torch.cat([x, log_det_init], dim=-1)
+        
+        # Integrate ODE forward using adjoint method
+        state_final = odeint_adjoint(
+            self._augmented_dynamics,
+            state_init,
+            t_span,
+            method='dopri5',
+            rtol=1e-3,
+            atol=1e-4,
+            adjoint_params=tuple(self.vf.parameters())
+        )[-1]
+        
+        # Final state
+        z = state_final[:, :-1]  # (batch, features)
+        log_det = state_final[:, -1]  # (batch,)
+        
+        return z, log_det
+        \end{lstlisting}
+    
+    \item Método \texttt{log\_prob}: Calcula a log-probabilidade $\log p(x)$ usando a fórmula de mudança de variáveis: $\log p(x) = \log p(z) - \log \det$, onde $z$ é obtido através da transformação forward e $\log \det$ é o log-determinante acumulado.
+    \begin{lstlisting}[language=Python, caption=Cálculo de log-probabilidade no CNF, label=code:cnf_log_prob]
+    def log_prob(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculate log p(x) using change of variables."""
+        # Ensure x requires grad for odeint_adjoint to work properly
+        if not x.requires_grad:
+            x = x.clone().requires_grad_(True)
+        
+        # Transform x -> z
+        z, log_det = self.forward(x)
+        
+        # log p(x) = log p(z) + log |det(∂z/∂x)|
+        # Since we integrate from x to z, log_det is log |det(∂z/∂x)|
+        log_prob_z = self.base_dist.log_prob(z)
+        log_prob_x = log_prob_z - log_det
+        return log_prob_x
+    \end{lstlisting}
+    
+    \item Método \texttt{sample}: Gera amostras $x \sim p(x)$ através de amostragem da distribuição base $z \sim p(z)$ seguida de integração reversa da ODE de $t=1$ até $t=0$.
+    \begin{lstlisting}[language=Python, caption=Geração de amostras no CNF, label=code:cnf_sample]
+    def sample(
+        self,
+        num_samples: int,
+        n_steps: int = 10,
+    ) -> torch.Tensor:
+        """Generate samples x ~ p(x) via z ~ p(z) -> x."""
+        t_span = torch.linspace(
+            1., 0.,
+            n_steps,
+            device=device,
+            dtype=torch.float64,
+        )
+        
+        # Sample z ~ p(z)
+        z = self.base_dist.sample((num_samples,)).to(device)
+        
+        # Transform z -> x
+        x_t = odeint_adjoint(
+            self.vf,
+            z,
+            t_span,
+            method='dopri5',
+            rtol=1e-3,
+            atol=1e-4,
+            adjoint_params=tuple(self.vf.parameters())
+        )
+        return x_t[-1]
+    \end{lstlisting}
+\end{itemize}
+
+O treinamento do CNF é realizado através da função \texttt{train\_cnf}, que minimiza a log-probabilidade negativa (negative log-likelihood) dos dados de treinamento:
+
+\begin{lstlisting}[language=Python, caption=Função de treinamento do CNF, label=code:train_cnf]
+def train_cnf(
+    model: CNF,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    n_epochs: int = 100,
+) -> None:
+    """Train CNF using negative log-likelihood."""
+    model.train()
+    
+    for epoch in range(n_epochs):
+        total_loss = 0.0
+        n_batches = 0
+        
+        for x0 in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{n_epochs}"):
+            optimizer.zero_grad()
+            x0 = x0.to(device)
+            
+            # Calculate log-likelihood
+            log_prob = model.log_prob(x0)
+            
+            # Loss: negative log-likelihood
+            loss = -log_prob.mean()
+            
+            loss.backward()
+            
+            # Gradient clipping (optional, but recommended)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            optimizer.step()
+            
+            total_loss += loss.item()
+            n_batches += 1
+        
+        avg_loss = total_loss / n_batches
+        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
+\end{lstlisting}
+
+A função de perda utilizada é a negative log-likelihood (NLL), que maximiza a probabilidade dos dados observados sob o modelo. O cálculo exato de trace tem complexidade $\mathcal{O}(d^2)$, tornando-o viável apenas para dimensões baixas ou intermediárias (até aproximadamente 100 dimensões). Para dimensões maiores, é necessário utilizar o estimador Hutchinson, implementado na Milestone 3 com FFJORD.
+
+Além disso, 
+\subsection{Milestone 3}
+Nessa milestone, foi implementado o \texttt{FFJORD} (Free-form Continuous Dynamics) para modelagem generativa no dataset MNIST completo (784 dimensões). O FFJORD estende o CNF utilizando o estimador Hutchinson para calcular o trace da matriz Jacobiana, reduzindo a complexidade computacional de $\mathcal{O}(d^2)$ para $\mathcal{O}(d)$, tornando-o viável para dados de alta dimensionalidade.
+
+O modelo \texttt{FFJORD} é idêntico ao CNF em estrutura, diferindo apenas na forma como o trace é computado. Os componentes principais são:
+
+\begin{itemize}
+    \item \texttt{\_\_init\_\_}: Inicializa o FFJORD com um campo vetorial, distribuição base e parâmetros do estimador Hutchinson. O parâmetro \texttt{num\_samples} controla o número de amostras estocásticas usadas na estimação (tipicamente 1 é suficiente), e \texttt{distribution} escolhe entre distribuição Rademacher ou Gaussiana para os vetores de ruído.
+    \begin{lstlisting}[language=Python, caption=\texttt{\_\_init\_\_} do modelo FFJORD, label=code:ffjord_init]
+    class FFJORD(nn.Module):
+        """Continuous Normalizing Flow with Hutchinson trace estimator."""
+        def __init__(
+            self,
+            vector_field: VectorField2D,
+            base_dist: Optional[Distribution] = None,
+            num_samples: int = 1,
+            distribution: Literal['rademacher', 'gaussian'] = 'rademacher'
+        ) -> None:
+            """Initialize FFJORD."""
+            super().__init__()
+            self.vf = vector_field
+            self.num_samples = num_samples
+            self.distribution = distribution
+    
+            if base_dist is None:
+                # Prior: N(0, I)
+                features = vector_field.features
+                self.base_dist = torch.distributions.MultivariateNormal(
+                    torch.zeros(features).to(device),
+                    torch.eye(features).to(device)
+                )
+            else:
+                self.base_dist = base_dist.to(device)
+    \end{lstlisting}
+    
+    \item Método \texttt{\_augmented\_dynamics}: Similar ao CNF, mas utiliza o estimador Hutchinson em vez do cálculo exato de trace. A derivada do log-determinante é calculada através do trace estimado: $\frac{d(\log \det)}{dt} = -\text{tr}\left(\frac{\partial f}{\partial x}\right)$ (estimado).
+    \begin{lstlisting}[language=Python, caption=ODE aumentada do FFJORD, label=code:ffjord_augmented]
+    def _augmented_dynamics(
+        self,
+        t: torch.Tensor,
+        state: torch.Tensor
+    ) -> torch.Tensor:
+        """Augmented ODE: integrates [x, log_det] simultaneously.
+        
+        dx/dt = f(x, t)
+        d(log_det)/dt = -trace(∂f/∂x) [estimated via Hutchinson]
+        """
+        x = state[:, :-1]  # (batch, features)
+        
+        # Ensure x requires grad for divergence computation
+        if not x.requires_grad:
+            x = x.requires_grad_(True)
+        
+        # Compute vector field
+        dx_dt = self.vf(t, x)  # (batch, features)
+        
+        # Compute trace using Hutchinson estimator
+        with torch.enable_grad():
+            trace = divergence_hutchinson(
+                lambda x: self.vf(t, x),
+                x,
+                num_samples=self.num_samples,
+                distribution=self.distribution
+            )  # (batch,)
+        
+        # d(log_det)/dt = -trace
+        dlogdet_dt = -trace.unsqueeze(-1)  # (batch, 1)
+        
+        return torch.cat([dx_dt, dlogdet_dt], dim=-1)
+    \end{lstlisting}
+    
+    \item Métodos \texttt{forward}, \texttt{log\_prob} e \texttt{sample}: Idênticos ao CNF, utilizando a mesma estrutura de integração ODE aumentada e fórmula de mudança de variáveis. A única diferença está na implementação interna de \texttt{\_augmented\_dynamics}, que utiliza estimação estocástica.
+\end{itemize}
+
+\section{Resultados e Discussão}
+\subsection{Milestone 1}
+O modelo NeuralODE foi treinado no dataset 2D e os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana.
+
+\subsubsection{Trajetórias Contínuas: $x \to z$}
+A Figura~\ref{fig:milestone1_trajectories} ilustra as trajetórias contínuas aprendidas pelo modelo. Cada linha representa o caminho percorrido por um ponto de dados ao longo da integração ODE de $t=0$ até $t=1$. É possível notar que, para todas as três distribuições,
+o modelo quase consegue mapear os dados para a gaussiana, porém é limitado pela simplicidade do modelo, que não consegue "espalhar" os pontos de algumas regiões dos dados, principalmente as próximas da origem.
+
+\begin{figure}[hbt!]
     \centering
-    \begin{tabular}{lc}
-        \toprule
-        Hiperparâmetro & Valor \\
-        \midrule
-        \textbf{Arquitetura} & \\
-        Features (dimensão de entrada) & 2 \\
-        Hidden dimensions & [64, 64] \\
-        Time embedding dimension & 16 \\
-        Ativação & Tanh \\
-        \midrule
-        \textbf{Treinamento} & \\
-        Learning rate & $10^{-4}$ \\
-        Optimizer & Adam \\
-        Batch size & 128 \\
-        Número de épocas & 200 \\
-        Número de steps (integração) & 20 \\
-        Número de amostras (MMD loss) & 10 \\
-        \midrule
-        \textbf{Solver ODE} & \\
-        Método inicial & euler \\
-        rtol & $10^{-5}$ \\
-        atol & $10^{-5}$ \\
-        \bottomrule
-    \end{tabular}
-    \caption{Hiperparâmetros utilizados no Milestone 1}
-    \label{tab:milestone1_hyperparams}
-\end{table}
-
-\textbf{Arquitetura do Vector Field}: O \texttt{VectorField2D} utiliza uma MLP com duas camadas ocultas de 64 neurônios cada, seguida de uma camada de saída de 2 dimensões (correspondente à dimensão dos dados). O tempo é codificado através de time embedding senoidal de dimensão 16, que é concatenado com o estado antes de passar pela rede. A última camada é inicializada com pesos pequenos ($\sigma = 0.01$) para garantir que as transformações iniciais sejam suaves.
-
-\textbf{Função de Perda}: Utilizamos Maximum Mean Discrepancy (MMD) loss com três componentes:
-\begin{enumerate}
-    \item \textbf{Forward loss}: Garante que dados $\rightarrow$ distribuição Gaussiana
-    \item \textbf{Backward loss}: Garante que distribuição Gaussiana $\rightarrow$ dados
-    \item \textbf{Reversibility loss}: Garante que forward seguido de backward retorna ao estado original (MSE)
-\end{enumerate}
-
-Esta abordagem permite que o modelo aprenda transformações bidirecionais e invertíveis, essenciais para normalizing flows.
-
-\subsubsection{Resultados e Visualizações}
-
-Após 200 épocas de treinamento, o modelo aprendeu transformações suaves que mapeiam os dados do dataset "moons" para uma distribuição Gaussiana. As visualizações principais são apresentadas nas Figuras~\ref{fig:milestone1_trajectories} e~\ref{fig:milestone1_vectorfield}.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{results/figures/01_moons_neuralode.png}
-    \caption{Trajetórias aprendidas pelo Neural ODE. À esquerda: distribuição original dos dados (transparente) com pontos iniciais $x(0)$ amostrados. À direita: estado final $x(1)$ após integração de $t=0$ até $t=1$, mostrando a transformação para distribuição mais próxima de uma Gaussiana.}
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_trajectories.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_trajectories.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_trajectories.png}
+    \caption{Trajetórias contínuas aprendidas pelo modelo para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
     \label{fig:milestone1_trajectories}
 \end{figure}
 
-A Figura~\ref{fig:milestone1_trajectories} demonstra que o modelo aprendeu trajetórias suaves que transformam os dados do formato "moons" para uma distribuição mais concentrada. As trajetórias são contínuas e não se cruzam, indicando que o campo vetorial aprendido é bem-comportado.
+\subsubsection{Campo Vetorial Aprendido: $\dot{x} =f(x,t)$}
+A Figura~\ref{fig:milestone1_vectorfield} mostra o campo vetorial $f(x, t)$ aprendido pelo modelo em um grid 2D $t \in [0,  0.5, 1]$. As setas indicam a direção e magnitude do campo vetorial em cada ponto do espaço. Nota-se que o campo consegue aprender que no início, os vetores de maior magnitude devem ser aqueles próximos aos pontos da distribuição, cuja direção é aquela que espalha os pontos em direção a gaussiana. Depois disso, o campo se torna próximo de simétrico radialmente, fazendo com que os pontos se espalhem de forma homogênea como na distribuição gaussiana.
 
-\begin{figure}[H]
+Além disso, para a distribuição \texttt{moons}, o modelo é capaz de deslocar o centro de massa do pontos das coordenadas (0.5, 0.25) para próximo da origem.
+
+\begin{figure}[hbt!]
     \centering
-    \includegraphics[width=0.7\textwidth]{results/figures/vector_field_2d.png}
-    \caption{Campo vetorial $f(x, t)$ aprendido pelo modelo em um grid 2D para $t=0.5$. As setas indicam a direção e magnitude do campo vetorial em cada ponto do espaço. Cores mais quentes (amarelo) indicam maior magnitude.}
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_vector_fields.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_vector_fields.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_vector_fields.png}
+    \caption{Campo vetorial $f(x, t)$ aprendido pelo modelo em um grid 2D para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
     \label{fig:milestone1_vectorfield}
 \end{figure}
 
-A Figura~\ref{fig:milestone1_vectorfield} mostra o campo vetorial aprendido, que define a dinâmica $\frac{dx}{dt} = f(x, t)$. O campo vetorial é suave e contínuo, com direções que guiam os pontos de dados em direção à distribuição alvo. A variação temporal do campo (não mostrada aqui) permite que o modelo adapte a dinâmica ao longo do tempo.
+\subsubsection{Tranformação: $z \sim N(0,I) \to x = \phi(z,1)$}\label{sec:transformations}
+A Figura~\ref{fig:milestone1_transformation} apresenta a transformação aprendida pelo modelo para os 3 datasets 2D. Observa-se que para os datasets \texttt{moons} o modelo quase consegue mapear efetivamente os dados para uma distribuição mais próxima de uma Gaussiana, mantendo a estrutura geral dos dados enquanto suaviza as transições.
 
-\subsubsection{Análise de Solvers ODE}
+\begin{figure}[hbt!]
+    \centering
+    \includegraphics[width=\textwidth]{imgs/01_moons_neuralode_transformation.png}
+    \includegraphics[width=\textwidth]{imgs/01_circles_neuralode_transformation.png}
+    \includegraphics[width=\textwidth]{imgs/01_spirals_neuralode_transformation.png}
+    \caption{Transformação aprendida pelo NeuralODE de $x(0)$ (esquerda) para $x(1)$ (direita) para os datasets \texttt{moons} (acima), \texttt{circles} (centro) e \texttt{spirals} (abaixo).}
+    \label{fig:milestone1_transformation}
+\end{figure}
 
-Uma das vantagens dos Neural ODEs é a flexibilidade na escolha do solver numérico. Comparamos três métodos diferentes para entender os trade-offs entre precisão, velocidade e número de avaliações de função (NFEs):
+\newpage
+
+\subsection{Milestone 2}
+O modelo CNF foi treinado em dois datasets diferentes: 2D para as três distribuições e o dataset MNIST reduzido (100 dimensões após PCA) e os resultados demonstram a capacidade do modelo em aprender transformações contínuas e invertíveis entre a distribuição dos dados e uma distribuição Gaussiana base. A Tabela~\ref{tab:milestone2_results} compara algumas métricas para os diferentes modelos e datasets.
 
 \begin{table}[H]
     \centering
-    \begin{tabular}{lcccc}
-        \toprule
-        Solver & NFEs & Tempo (s) & Erro & Características \\
-        \midrule
-        euler & 100 & 0.5 & $10^{-2}$ & Fixo, simples, rápido \\
-        rk4 & 25 & 0.3 & $10^{-4}$ & Fixo, alta ordem \\
-        dopri5 & 8 & 0.2 & $10^{-5}$ & Adaptativo, alta precisão \\
-        \bottomrule
-    \end{tabular}
-    \caption{Comparação de solvers ODE para Neural ODE em dados 2D}
-    \label{tab:milestone1_solvers}
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cc|cccc}
+            \hline
+            Dataset & Modelo & NFEs & Tempo & Tempo de amostragem & Log-likelihood \\
+            &&& por época (s) & de 1000 amostras (ms) & média \\
+            \hline
+            Moons & CNF & 40 & 19.61 & 36 & -1.1067 \\ 
+            Moons & RealNVP & - & 0.28 & 48 & -0.5785 \\ 
+            Circles & CNF & 40 & 14.76 & 28.4 & -1.625 \\ 
+            Circles & RealNVP & - & 0.29 & 1.6 & -1.1343 \\ 
+            Spirals & CNF & 40 & 19.8 & 54.1 & -1.3429 \\ 
+            Spirals & RealNVP & - & 0.43 & 1.3 & -0.6413 \\ 
+            \hline
+        \end{tabular}
+    }
+    \caption{Comparação de performance entre os modelos CNF e RealNVP para as três distribuições do dataset 2D e o dataset MNIST Reduzido.}
+    \label{tab:milestone2_results}
 \end{table}
 
-\textbf{Análise dos Resultados}:
-\begin{itemize}
-    \item \textbf{Euler}: Método mais simples e rápido, mas requer muitos passos (100 NFEs) para alcançar precisão aceitável. Adequado para prototipagem rápida.
-    \item \textbf{RK4 (Runge-Kutta 4)}: Método de quarta ordem que oferece melhor precisão que Euler com menos passos (25 NFEs). Boa escolha para problemas de dimensão baixa a média.
-    \item \textbf{Dormand-Prince 5 (dopri5)}: Solver adaptativo que ajusta automaticamente o tamanho do passo baseado na tolerância. Apesar de ser mais complexo, oferece a melhor precisão com o menor número de NFEs (8 em média). \textbf{Recomendado para produção}.
-\end{itemize}
-
-O solver dopri5 oferece o melhor trade-off entre precisão e eficiência computacional, sendo a escolha padrão para os experimentos subsequentes.
-
-\subsubsection{Análise de Tolerâncias}
-
-Para solvers adaptativos como dopri5, as tolerâncias relativas (\texttt{rtol}) e absolutas (\texttt{atol}) controlam a precisão da integração e, consequentemente, o número de avaliações de função. Realizamos uma análise sistemática variando essas tolerâncias:
+As Figuras~\ref{fig:moons_comparison}, \ref{fig:circles_comparison} e \ref{fig:spirals_comparison} ilustram a mesma transformação contida na seção \ref{sec:transformations} para as três distribuições 2D (moons, circles, spirals) e os dois modelos (CNF e RealNVP). Cada figura mostra a comparação entre os dois modelos para um dataset específico.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{results/figures/nfe_vs_tolerance.png}
-    \caption{Impacto das tolerâncias (rtol, atol) no número de avaliações de função (NFEs) para o solver dopri5. Tolerâncias mais rigorosas (menores valores) resultam em mais NFEs mas maior precisão.}
-    \label{fig:milestone1_tolerances}
-\end{figure}
-
-\textbf{Observações}:
-\begin{itemize}
-    \item Tolerâncias mais rigorosas ($\texttt{rtol} = 10^{-5}, \texttt{atol} = 10^{-6}$) resultam em $\sim$15-20 NFEs, mas garantem alta precisão
-    \item Tolerâncias mais relaxadas ($\texttt{rtol} = 10^{-3}, \texttt{atol} = 10^{-4}$) reduzem NFEs para $\sim$5-8, adequadas para treinamento
-    \item Para dados 2D, tolerâncias intermediárias ($\texttt{rtol} = 10^{-5}, \texttt{atol} = 10^{-5}$) oferecem bom equilíbrio
-\end{itemize}
-
-\subsubsection{Convergência do Treinamento}
-
-O modelo foi treinado por 200 épocas, com a função de perda convergindo de aproximadamente 1.64 (época 1) para valores abaixo de 1.35 (época 200). A convergência é suave, indicando que o learning rate de $10^{-4}$ é apropriado para este problema. O treinamento completo leva aproximadamente 2-3 minutos em GPU, demonstrando a eficiência dos Neural ODEs para problemas de baixa dimensionalidade.
-
-\subsection{Milestone 2: CNF com Trace Exato}
-
-\subsubsection{Transformação de Distribuições}
-
-Treinamos CNF para transformar $z \sim \mathcal{N}(0, I)$ em distribuição dos dados:
-
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{results/figures/base_distribution.png}
-        \caption{Distribuição base $\mathcal{N}(0, I)$}
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_moons_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:moons_cnf}
     \end{subfigure}
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{results/figures/transformed_distribution.png}
-        \caption{Distribuição transformada}
+    \hfill
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_moons_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:moons_realnvp}
     \end{subfigure}
-    \caption{Transformação de distribuições pelo CNF}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{moons}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:moons_comparison}
 \end{figure}
 
-\subsubsection{Análise de Escalabilidade}
-
-Comparamos complexidade do trace exato em diferentes dimensões:
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{lcc}
-        \toprule
-        Dimensão & Tempo Trace Exato (s) & Tempo Hutchinson (s) \\
-        \midrule
-        2 & 0.1 & 0.05 \\
-        10 & 2.5 & 0.1 \\
-        50 & 62.5 & 0.5 \\
-        784 (MNIST) & - & 2.0 \\
-        \bottomrule
-    \end{tabular}
-    \caption{Comparação de escalabilidade}
-\end{table}
-
-\textbf{Observação}: Trace exato torna-se impraticável para $d > 50$, confirmando necessidade de estimadores estocásticos.
-
-\subsubsection{Comparação com Real NVP}
-
-Comparamos CNF com baseline Real NVP:
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{lcc}
-        \toprule
-        Modelo & Bits/dim (2D) & Tempo Treino (s) \\
-        \midrule
-        Real NVP & 2.1 & 50 \\
-        CNF (trace exato) & 1.9 & 200 \\
-        \bottomrule
-    \end{tabular}
-    \caption{Comparação CNF vs Real NVP em dados 2D}
-\end{table}
-
-\subsection{Milestone 3: FFJORD em MNIST}
-
-\subsubsection{Configuração}
-
-Utilizamos o MNIST completo conforme descrito na Seção 4, com preprocessing de dequantização e logit transform. A configuração de treinamento inclui:
-\begin{itemize}
-    \item Preprocessamento: dequantization + logit transform (conforme Seção 4.3)
-    \item Learning rate: $10^{-4}$ com warm-up linear
-    \item Batch size: 128
-    \item Regularização: $\lambda_{KE} = 0.01$ (kinetic energy)
-\end{itemize}
-
-\subsubsection{Resultados}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{lcc}
-        \toprule
-        Métrica & Valor \\
-        \midrule
-        Bits/dim (test) & 1.2 \\
-        Epochs & 50 \\
-        Tempo total (h) & 8 \\
-        NFEs médio & 12 \\
-        \bottomrule
-    \end{tabular}
-    \caption{Resultados FFJORD em MNIST}
-\end{table}
-
-\subsubsection{Amostras Geradas}
+\newpage
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{results/figures/ffjord_samples.png}
-    \caption{Amostras geradas pelo FFJORD treinado}
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_circles_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:circles_cnf}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_circles_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:circles_realnvp}
+    \end{subfigure}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{circles}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:circles_comparison}
 \end{figure}
 
-\subsubsection{Análise de Trade-offs}
+\newpage
 
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_spirals_cnf_transformation.png}
+        \caption{CNF}
+        \label{fig:spirals_cnf}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imgs/02_spirals_realnvp_transformation.png}
+        \caption{RealNVP}
+        \label{fig:spirals_realnvp}
+    \end{subfigure}
+    \caption{Transformações aprendidas pelos modelos CNF e RealNVP para o dataset \texttt{spirals}. Cada subfigura mostra a transformação de $z \sim N(0,I)$ (esquerda) para $x$ (direita).}
+    \label{fig:spirals_comparison}
+\end{figure}
+
+É possível notar que o CNF, além de ser mais custoso computacionalmente de treinar, obtém resultados significantemente piores que os do RealNVP, que é mais rápido e produz amostras melhores. A única distribuição em que o CNF se saiu tão bem quanto ou melhor que o RealNVP foi para o \texttt{Moons}.
+
+\subsection{Milestone 3}
+Nesse milestone, utiliza-se o dataset MNIST completo e o traço estimado de Hutchinson no modelo FFJORD.
+
+
+\section{Experimentos}
+\subsection{Análise de NFEs}
+A Tabela \ref{tab:exp1_results} descreve as diferentes configurações de solvers e tolerâncias usadas e suas respectivas métricas. O modelo utilizado é o \texttt{NeuralODE} cujos pesos são carregados dos checkpoints para cada distriubição. É possível notar que, como era esperado, o método dopri5 com as menores tolerâncias são os que geram os maiores NFEs. No entanto, o método que gera o maior tempo computacional em ambos os apssos é o rk4.
+
+\begin{table}[hbt!]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cccc|ccc}
+            \hline
+            Distribuição & Solver & \texttt{rtol} & \texttt{atol} & NFEs & tempo forward (ms) & tempo backward (ms) \\
+            \hline
+            moons & euler & -- & -- & 9 & 29.5 & 30.5 \\
+            moons & rk4 & -- & -- & 36 & 78.2 & 78.1 \\
+            moons & dopri5 & 1e{-3} & 1e{-4} & 56 & 31.4 & 32.0 \\
+            moons & dopri5 & 1e{-4} & 1e{-5} & 86 & 42.7 & 43.2 \\
+            moons & dopri5 & 1e{-5} & 1e{-6} & 122 & 56.6 & 59.2 \\
+            circles & euler & -- & -- & 9 & 26.8 & 26.8 \\
+            circles & rk4 & -- & -- & 36 & 71.7 & 73.2 \\
+            circles & dopri5 & 1e{-3} & 1e{-4} & 50 & 31.4 & 42.0 \\
+            circles & dopri5 & 1e{-4} & 1e{-5} & 68 & 36.7 & 39.3 \\
+            circles & dopri5 & 1e{-5} & 1e{-6} & 110 & 58.9 & 61.0 \\
+            spirals & euler & -- & -- & 9 & 115.6 & 26.1 \\
+            spirals & rk4 & -- & -- & 36 & 71.2 & 72.6 \\
+            spirals & dopri5 & 1e{-3} & 1e{-4} & 32 & 23.4 & 25.5 \\
+            spirals & dopri5 & 1e{-4} & 1e{-5} & 38 & 25.7 & 27.5 \\
+            spirals & dopri5 & 1e{-5} & 1e{-6} & 74 & 39.4 & 34.4 \\
+            \hline
+        \end{tabular}
+    }
+    \caption{Experimento 1: Configurações entre solvers e tolerâncias e as respectivas métricas.}
+    \label{tab:exp1_results}
+\end{table}
+
+\subsection{Regularizações}
+A tabela \ref{tab:exp2_results} mostra os resultados do Experimento 2, comparando diferentes configurações de regularização aplicadas ao modelo FFJORD. As regularizações testadas são:
 \begin{itemize}
-    \item \textbf{Expressividade}: CNFs são altamente expressivos devido à natureza contínua
-    \item \textbf{Custo Computacional}: NFEs variam com complexidade dos dados
-    \item \textbf{Memória}: Método adjoint reduz uso de memória vs backpropagation direto
-    \item \textbf{Estabilidade}: Regularização de kinetic energy ajuda convergência
+    \item \textbf{Kinetic Energy (KE)}: Penaliza velocidades altas no campo vetorial ($\lambda_{KE}$)
+    \item \textbf{Jacobian Frobenius (JF)}: Penaliza Jacobiano complexo ($\lambda_{JF}$)
 \end{itemize}
 
-\section{Discussão}
-
-\subsection{Contribuições Principais}
-
-\begin{enumerate}
-    \item Implementação completa de Neural ODE, CNF e FFJORD do zero
-    \item Análise comparativa de solvers ODE e trade-offs
-    \item Demonstração prática da diferença entre trace exato ($\mathcal{O}(d^2)$) e Hutchinson ($\mathcal{O}(d)$)
-    \item Treinamento bem-sucedido em MNIST com resultados competitivos
-\end{enumerate}
-
-\subsection{Limitações e Desafios}
-
+As métricas avaliadas são:
 \begin{itemize}
-    \item \textbf{Convergência}: FFJORD requer tuning cuidadoso de hiperparâmetros
-    \item \textbf{Tempo de Treino}: Ainda mais lento que discrete flows para datasets simples
-    \item \textbf{NFEs}: Número de avaliações pode ser alto para dados complexos
-    \item \textbf{Interpretabilidade}: Transformações contínuas são menos interpretáveis que discretas
+    \item \textbf{Log-Prob}: Log-likelihood final no conjunto de teste (valores maiores indicam melhor ajuste)
+    \item \textbf{NFE}: Número de avaliações da função (Number of Function Evaluations) durante a integração ODE
 \end{itemize}
 
-\subsection{Lições Aprendidas}
+\begin{table}[hbt!]
+    \centering
+    \begin{tabular}{cc|cc|cc}
+        \hline
+        $\lambda_{KE}$ & $\lambda_{JF}$ & Log-Prob & NFE & $\Delta$ Log-Prob & $\Delta$ NFE \\
+        \hline
+        0.0 & 0.0 & 2.5159 & 724 & -- & -- \\
+        0.01 & 0.0 & 2.5709 & 364 & +0.0550 & -360 \\
+        0.0 & 0.01 & 2.6805 & 1024 & +0.1647 & +300 \\
+        0.01 & 0.01 & 2.7906 & 640 & +0.2748 & -84 \\
+        0.1 & 0.0 & 2.4474 & 496 & -0.0685 & -228 \\
+        0.0 & 0.1 & 2.7408 & 820 & +0.2249 & +96 \\
+        0.1 & 0.1 & \textbf{2.8477} & 688 & +0.3318 & -36 \\
+        \hline
+    \end{tabular}
+    \caption{Experimento 2: Diferentes configurações de regularizações e as respectivas métricas. $\Delta$ Log-Prob e $\Delta$ NFE são as diferenças em relação ao baseline (sem regularização). O melhor resultado de Log-Prob está destacado em negrito.}
+    \label{tab:exp2_results}
+\end{table}
 
-\begin{enumerate}
-    \item Inicialização adequada (última camada com pesos pequenos) é crucial
-    \item Regularização de kinetic energy melhora estabilidade
-    \item Hutchinson com $n=1$ amostra é suficiente na prática
-    \item Warm-up de learning rate ajuda convergência inicial
-\end{enumerate}
-
-\subsection{Preparação para Flow Matching}
-
-Este projeto prepara conceitualmente para Flow Matching através de:
+Os resultados mostram que:
 \begin{itemize}
-    \item Compreensão de campos vetoriais e integração ODE
-    \item Experiência com estimação de trace
-    \item Familiaridade com transformações contínuas
-    \item Análise de trade-offs computacionais
+    \item A configuração com ambas as regularizações em valores altos ($\lambda_{KE}=0.1, \lambda_{JF}=0.1$) obteve o melhor Log-Prob (2.8477), representando um ganho de +0.3318 em relação ao baseline.
+    \item A configuração com apenas Kinetic Energy em valor baixo ($\lambda_{KE}=0.01, \lambda_{JF}=0.0$) obteve o menor NFE (364), reduzindo em 360 avaliações em relação ao baseline, mantendo um Log-Prob competitivo (+0.0550).
+    \item A regularização Jacobian Frobenius isolada ($\lambda_{KE}=0.0, \lambda_{JF}=0.01$) aumentou significativamente o NFE (+300), mas também melhorou o Log-Prob (+0.1647).
+    \item A combinação de ambas as regularizações em valores baixos ($\lambda_{KE}=0.01, \lambda_{JF}=0.01$) oferece um bom equilíbrio, melhorando o Log-Prob (+0.2748) com apenas uma pequena redução no NFE (-84).
 \end{itemize}
+
+
+% \section{Tradeoff}
+% \section{Dificuldades encontradas}
+% \section{Conexão com Flow Matching}
+% \subsection{É possível treinar o vector field sem integrar ODEs?}
+% \subsection{E se forçássemos trajetórias retas?}
+% \subsection{E se quiséssemos modelar explicitamente o caminho z -> x?}
+% \subsection{E se garantíssemos transporte ótimo (no sentido de Monge)?}
 
 \section{Conclusão}
-
-Este projeto implementou com sucesso Neural ODEs e Continuous Normalizing Flows, demonstrando tanto a expressividade quanto os desafios computacionais dessas técnicas. Os resultados mostram que:
-
-\begin{itemize}
-    \item Neural ODEs são eficazes para modelar transformações contínuas
-    \item CNFs oferecem alta expressividade mas com custo computacional significativo
-    \item FFJORD com Hutchinson é essencial para escalabilidade em alta dimensão
-    \item Trade-offs entre expressividade e eficiência devem ser cuidadosamente considerados
-\end{itemize}
-
-Trabalhos futuros podem explorar:
-\begin{itemize}
-    \item Arquiteturas mais eficientes de vector fields
-    \item Técnicas avançadas de regularização
-    \item Aplicação em domínios específicos (imagens, áudio, etc.)
-    \item Integração com Flow Matching para melhor performance
-\end{itemize}
-
-\section{Apêndices}
-
-\subsection{Guia de Inserção de Código}
-
-O documento utiliza o pacote \texttt{listings} para inserir snippets de código. Este guia apresenta as três formas principais de inserção.
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{ll}
-        \toprule
-        \textbf{Método} & \textbf{Uso} \\
-        \midrule
-        \texttt{\textbackslash lstinline} & Código curto no texto \\
-        \texttt{lstlisting} & Blocos de código com syntax highlighting \\
-        \texttt{\textbackslash lstinputlisting} & Importar código de arquivo externo \\
-        \bottomrule
-    \end{tabular}
-    \caption{Resumo dos métodos de inserção de código}
-    \label{tab:codigo_metodos}
-\end{table}
-
-\subsubsection{Código Inline}
-
-Para inserir código curto diretamente no texto, utilize \texttt{\textbackslash lstinline}:
-
-\textbf{Sintaxe:} \texttt{\textbackslash lstinline[opções]|código aqui|}
-
-\textbf{Exemplo:} O comando \lstinline|print("Hello")| imprime texto. A função \lstinline[language=Python]|def train():| define uma função de treinamento.
-
-\subsubsection{Bloco de Código}
-
-Para blocos de código maiores, utilize o ambiente \texttt{lstlisting}:
-
-\begin{lstlisting}[language=Python, caption={Exemplo de função Python}, label={code:exemplo}]
-def exemplo():
-    x = 10
-    return x * 2
-
-resultado = exemplo()
-print(resultado)  # Output: 20
-\end{lstlisting}
-
-\textbf{Opções principais:}
-\begin{itemize}
-    \item \texttt{language=Python}: Linguagem para syntax highlighting
-    \item \texttt{caption=\{\}}: Legenda abaixo do código
-    \item \texttt{label=\{\}}: Referência para \texttt{\textbackslash ref}
-    \item \texttt{firstline=N, lastline=M}: Mostra apenas linhas específicas
-    \item \texttt{numbers=none}: Remove numeração de linhas
-    \item \texttt{frame=none}: Remove a borda
-\end{itemize}
-
-\subsubsection{Importar de Arquivo}
-
-Para incluir código de um arquivo externo, utilize \texttt{\textbackslash lstinputlisting}:
-
-\textbf{Sintaxe:}
-\begin{verbatim}
-\lstinputlisting[
-    language=Python,
-    firstline=1,
-    lastline=50,
-    caption={Título},
-    label={ref}
-]{caminho/arquivo.py}
-\end{verbatim}
-
-Isso importa as linhas especificadas do arquivo com syntax highlighting.
-
-\subsubsection{Exemplo Completo}
-
-Exemplo completo com legenda e referência (Código~\ref{code:divergence}):
-
-\begin{lstlisting}[
-    language=Python,
-    caption={Função de divergência exata},
-    label={code:divergence}
-]
-def divergence_exact(f, x):
-    batch_size, dim = x.shape
-    trace = torch.zeros(batch_size, device=device)
-    for i in range(dim):
-        df_i = torch.autograd.grad(
-            f[:, i].sum(), x, 
-            create_graph=True, 
-            retain_graph=True
-        )[0]
-        trace += df_i[:, i]
-    return trace
-\end{lstlisting}
-
-Referencie o código usando \texttt{\textbackslash ref\{code:divergence\}}.
-
-\subsection{Código Principal}
-
-\subsubsection{VectorField2D}
-% Incluir código relevante se necessário
-
-\subsubsection{CNF}
-% Incluir código relevante se necessário
-
-\subsubsection{FFJORD}
-% Incluir código relevante se necessário
-
-\subsection{Hiperparâmetros Detalhados}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{lc}
-        \toprule
-        Hiperparâmetro & Valor \\
-        \midrule
-        Hidden dims & [64, 64] \\
-        Time embed dim & 16 \\
-        Learning rate & $10^{-4}$ \\
-        Batch size & 128 \\
-        $\lambda_{KE}$ & 0.01 \\
-        Solver & dopri5 \\
-        rtol & $10^{-3}$ \\
-        atol & $10^{-4}$ \\
-        \bottomrule
-    \end{tabular}
-    \caption{Hiperparâmetros utilizados}
-\end{table}
-
-\subsection{Recursos Computacionais}
-
-\begin{itemize}
-    \item GPU: [Especificar se usado]
-    \item Tempo total de treino: ~10 horas
-    \item Memória: ~8GB GPU
-\end{itemize}
-
-\bibliographystyle{ieeetr}
-\begin{thebibliography}{9}
-
-\bibitem{chen2018neural}
-Chen, T. Q., Rubanova, Y., Bettencourt, J., \& Duvenaud, D. K. (2018). Neural ordinary differential equations. \textit{Advances in neural information processing systems}, 31.
-
-\bibitem{chen2018ffjord}
-Grathwohl, W., Chen, R. T., Bettencourt, J., Sutskever, I., \& Duvenaud, D. (2018). Ffjord: Free-form continuous dynamics for scalable reversible generative models. \textit{arXiv preprint arXiv:1810.01367}.
-
-\bibitem{hutchinson1990}
-Hutchinson, M. F. (1990). A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines. \textit{Communications in Statistics-Simulation and Computation}, 19(2), 433-450.
-
-\bibitem{realnvp}
-Dinh, L., Sohl-Dickstein, J., \& Bengio, S. (2016). Density estimation using real nvp. \textit{arXiv preprint arXiv:1605.08803}.
-
-\bibitem{vaswani2017attention}
-Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., \ldots \& Polosukhin, I. (2017). Attention is all you need. \textit{Advances in neural information processing systems}, 30.
-
-\end{thebibliography}
-
+\bibliography{references}
 \end{document}
-
