@@ -1,14 +1,15 @@
 """Experimento 3: Comparação de arquiteturas de Vector Field."""
 import os
+import csv
 import time
 import torch
 import torch.nn as nn
 import math
 import torch.optim as optim
 from src.models.vector_field import VectorField2D
-from src.models.neural_ode import NeuralODE
+from src.models.ffjord import FFJORD
 from src.utils.datasets import Synthetic2D, get_dataloader
-from src.utils.training import count_nfe
+from src.utils.training import train_ffjord, count_nfe
 from src.utils.visualization import Synthetic2DViz
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
@@ -161,7 +162,7 @@ def get_checkpoint_path(
 
 
 def save_checkpoint(
-    model: NeuralODE,
+    model: FFJORD,
     optimizer: optim.Optimizer,
     history: Dict[str, list],
     metrics: Dict[str, float],
@@ -181,9 +182,7 @@ def save_checkpoint(
             'hidden_dims': hidden_dims,
             'time_embed_dim': model.vf.time_embed_dim,
             'vf_type': type(model.vf).__name__,
-            'solver': model.solver,
-            'rtol': model.rtol,
-            'atol': model.atol
+            'num_samples': model.num_samples
         }
     }
     torch.save(checkpoint, checkpoint_path)
@@ -201,7 +200,7 @@ def load_checkpoint(
 
 
 def compute_reconstruction_error(
-    model: NeuralODE,
+    model: FFJORD,
     x: torch.Tensor,
     n_steps: int = 100
 ) -> float:
@@ -209,43 +208,40 @@ def compute_reconstruction_error(
     model.eval()
     with torch.no_grad():
         # Forward: x -> z
-        x_t = model(x, n_steps)
-        z = x_t[-1]  # Final state
+        z, _ = model(x, n_steps)
 
         # Backward: z -> x_recon
-        x_recon_t = model.backward(z, n_steps)
-        x_recon = x_recon_t[-1]  # Final state
+        x_recon, _ = model.backward(z, n_steps)
 
         # Reconstruction error
         error = ((x - x_recon) ** 2).mean().item()
     return error
 
 
-def train_neural_ode_with_metrics(
-    model: NeuralODE,
+def train_ffjord_with_metrics(
+    model: FFJORD,
     train_loader: DataLoader,
     test_loader: DataLoader,
     optimizer: optim.Optimizer,
     device: torch.device,
     n_epochs: int = 50,
-    n_steps: int = 100,
-    n_samples: int = 25,
     convergence_threshold: float = 0.001,
     convergence_window: int = 5
 ) -> Tuple[Dict[str, list], Dict[str, float]]:
-    """Train NeuralODE and track metrics.
+    """Train FFJORD and track metrics.
 
     Returns:
-        history: Training history (losses, test_recon_error)
-        metrics: Final metrics (test_recon_error, training_time, nfe,
-            convergence_epoch)
+        history: Training history (losses, test_recon_error, test_log_prob)
+        metrics: Final metrics (test_recon_error, test_log_prob, training_time,
+            nfe, convergence_epoch, final_loss)
     """
     model.train()
     start_time = time.time()
 
     history = {
         'loss': [],
-        'test_recon_error': []
+        'test_recon_error': [],
+        'test_log_prob': []
     }
 
     best_loss = float('inf')
@@ -254,78 +250,51 @@ def train_neural_ode_with_metrics(
 
     for epoch in range(n_epochs):
         total_loss = 0.0
+        total_nll = 0.0
         n_batches = 0
 
-        for x0_target in tqdm(
+        for x0 in tqdm(
             train_loader, desc=f"Epoch {epoch + 1}/{n_epochs}"
         ):
             optimizer.zero_grad()
-            batch_size = x0_target.shape[0]
-            features = x0_target.shape[1]
+            x0 = x0.to(device)
 
-            x0_target = x0_target.to(device)
-
-            # Forward trajectory: x0_target -> x1_pred
-            forward_x_t = model(x0_target, n_steps)
-            forward_x_t = forward_x_t.permute(1, 2, 0)
-
-            # Backward trajectory: x1_target -> x0_pred
-            x1_target = torch.randn_like(x0_target)
-            backward_x_t = model.backward(x1_target, n_steps)
-            backward_x_t = torch.flip(backward_x_t, dims=[0])
-            backward_x_t = backward_x_t.permute(1, 2, 0)
-
-            # Sample time points
-            time_indices = torch.linspace(
-                0, n_steps - 1, n_samples,
-                dtype=torch.long,
-                device=x0_target.device
-            ).unsqueeze(0).expand(batch_size, n_samples)
-
-            batch_indices = torch.arange(
-                batch_size, device=x0_target.device
-            ).unsqueeze(1)
-
-            # Sample forward states
-            sample_forward = forward_x_t[
-                batch_indices, :, time_indices
-            ]
-            sample_forward = sample_forward.permute(0, 2, 1)
-            sample_forward = sample_forward.reshape(-1, features)
-
-            # Sample backward states
-            sample_backward = backward_x_t[
-                batch_indices, :, time_indices
-            ]
-            sample_backward = sample_backward.permute(0, 2, 1)
-            sample_backward = sample_backward.reshape(-1, features)
-
-            # MMD-like loss (reversibility)
-            loss = ((sample_forward - sample_backward) ** 2).mean()
+            # Calculate log-likelihood
+            log_prob = model.log_prob(x0)
+            nll = -log_prob.mean()
+            loss = nll
 
             loss.backward()
+            
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
 
             total_loss += loss.item()
+            total_nll += nll.item()
             n_batches += 1
 
         avg_loss = total_loss / n_batches
 
-        # Evaluate reconstruction error on test set
+        # Evaluate on test set
         model.eval()
         test_recon_errors = []
+        test_log_probs = []
         with torch.no_grad():
             for x_test in test_loader:
                 x_test = x_test.to(device)
-                recon_error = compute_reconstruction_error(
-                    model, x_test, n_steps
-                )
+                recon_error = compute_reconstruction_error(model, x_test)
                 test_recon_errors.append(recon_error)
+                log_prob = model.log_prob(x_test).mean().item()
+                test_log_probs.append(log_prob)
         avg_test_recon_error = sum(test_recon_errors) / len(test_recon_errors)
+        avg_test_log_prob = sum(test_log_probs) / len(test_log_probs)
         model.train()
 
         history['loss'].append(avg_loss)
         history['test_recon_error'].append(avg_test_recon_error)
+        history['test_log_prob'].append(avg_test_log_prob)
 
         # Check convergence
         loss_window.append(avg_loss)
@@ -345,7 +314,8 @@ def train_neural_ode_with_metrics(
 
         print(
             f"Epoch {epoch + 1}, Loss: {avg_loss:.6f}, "
-            f"Test recon error: {avg_test_recon_error:.6f}"
+            f"Test recon error: {avg_test_recon_error:.6f}, "
+            f"Test log-prob: {avg_test_log_prob:.4f}"
         )
 
     training_time = time.time() - start_time
@@ -354,22 +324,29 @@ def train_neural_ode_with_metrics(
     sample_batch = torch.randn(10, 2).to(device)
     nfe = count_nfe(model, sample_batch)
 
-    # Final test reconstruction error
+    # Final test metrics
     model.eval()
     final_test_recon_errors = []
+    final_test_log_probs = []
     with torch.no_grad():
         for x_test in test_loader:
             x_test = x_test.to(device)
-            recon_error = compute_reconstruction_error(
-                model, x_test, n_steps
-            )
+            recon_error = compute_reconstruction_error(model, x_test)
             final_test_recon_errors.append(recon_error)
+            log_prob = model.log_prob(x_test).mean().item()
+            final_test_log_probs.append(log_prob)
     final_test_recon_error = (
         sum(final_test_recon_errors) / len(final_test_recon_errors)
     )
+    final_test_log_prob = (
+        sum(final_test_log_probs) / len(final_test_log_probs)
+    )
+    final_loss = -final_test_log_prob
 
     metrics = {
         'test_recon_error': final_test_recon_error,
+        'test_log_prob': final_test_log_prob,
+        'final_loss': final_loss,
         'training_time': training_time,
         'nfe': nfe,
         'convergence_epoch': (
@@ -452,11 +429,9 @@ def compare_architectures(
                     hidden_dims=model_config['hidden_dims'],
                     time_embed_dim=model_config['time_embed_dim']
                 )
-                model = NeuralODE(
+                model = FFJORD(
                     vf,
-                    solver=model_config.get('solver', 'dopri5'),
-                    rtol=model_config.get('rtol', 1e-3),
-                    atol=model_config.get('atol', 1e-4)
+                    num_samples=model_config.get('num_samples', 1)
                 ).to(device)
                 model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -481,13 +456,11 @@ def compare_architectures(
                     hidden_dims=hidden_dims,
                     time_embed_dim=time_embed_dim
                 )
-                model = NeuralODE(
-                    vf, solver='dopri5', rtol=1e-3, atol=1e-4
-                ).to(device)
-                optimizer = optim.Adam(model.parameters(), lr=1e-3)
+                model = FFJORD(vf, num_samples=1).to(device)
+                optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
                 # Train with metrics
-                history, metrics = train_neural_ode_with_metrics(
+                history, metrics = train_ffjord_with_metrics(
                     model,
                     train_loader,
                     test_loader,
@@ -527,67 +500,43 @@ def compare_architectures(
     return results
 
 
-def save_summary_txt(
+def save_summary_csv(
     results: Dict[str, Dict],
     save_dir: str = 'results'
 ) -> None:
-    """Save architecture comparison results to summary text file."""
+    """Save architecture comparison results to CSV file."""
     os.makedirs(save_dir, exist_ok=True)
-    txt_path = os.path.join(save_dir, 'exp3_summary.txt')
-    with open(txt_path, 'w') as f:
-        f.write("=" * 80 + "\n")
-        f.write("EXPERIMENT 3: ARCHITECTURE COMPARISON SUMMARY\n")
-        f.write("=" * 80 + "\n\n")
+    csv_path = os.path.join(save_dir, 'exp3_metrics.csv')
 
-        # Header
-        f.write(
-            f"{'Configuration':<25} {'Test Recon Error':<18} "
-            f"{'Training Time (s)':<18} {'NFEs':<10} "
-            f"{'Convergence Epoch':<18}\n"
-        )
-        f.write("-" * 80 + "\n")
+    # Prepare CSV data
+    rows = []
+    for config_name, result in results.items():
+        metrics = result['metrics']
+        config = result['config']
+        rows.append({
+            'Config': config_name,
+            'Depth': config['depth'],
+            'Time_Embed': config['time_embed'],
+            'Hidden_Dims': str(config['hidden_dims']),
+            'Loss': metrics.get('final_loss', -metrics.get('test_log_prob', 0)),
+            'NFE': metrics['nfe'],
+            'Test_Log_Prob': metrics.get('test_log_prob', 0),
+            'Test_Recon_Error': metrics['test_recon_error'],
+            'Training_Time': metrics['training_time'],
+            'Convergence_Epoch': metrics['convergence_epoch']
+        })
 
-        # Sort by test recon error (ascending - lower is better)
-        sorted_results = sorted(
-            results.items(),
-            key=lambda x: x[1]['metrics']['test_recon_error']
-        )
+    # Write CSV
+    fieldnames = [
+        'Config', 'Depth', 'Time_Embed', 'Hidden_Dims', 'Loss', 'NFE',
+        'Test_Log_Prob', 'Test_Recon_Error', 'Training_Time', 'Convergence_Epoch'
+    ]
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
-        for config_name, result in sorted_results:
-            metrics = result['metrics']
-            f.write(
-                f"{config_name:<25} "
-                f"{metrics['test_recon_error']:>17.6f}  "
-                f"{metrics['training_time']:>17.2f}  "
-                f"{metrics['nfe']:>9}  "
-                f"{metrics['convergence_epoch']:>17}\n"
-            )
-
-        f.write("\n" + "=" * 80 + "\n")
-        f.write("BEST CONFIGURATION (by test reconstruction error):\n")
-        f.write("=" * 80 + "\n")
-        best_config, best_result = sorted_results[0]
-        f.write(f"Configuration: {best_config}\n")
-        f.write(
-            f"Test Reconstruction Error: "
-            f"{best_result['metrics']['test_recon_error']:.6f}\n"
-        )
-        f.write(
-            f"Training Time: "
-            f"{best_result['metrics']['training_time']:.2f}s\n"
-        )
-        f.write(f"NFEs: {best_result['metrics']['nfe']}\n")
-        f.write(
-            f"Convergence Epoch: "
-            f"{best_result['metrics']['convergence_epoch']}\n"
-        )
-        f.write(
-            f"Architecture: {best_result['config']['depth']} depth, "
-            f"{best_result['config']['time_embed']} time embedding\n"
-        )
-        f.write(f"Hidden dims: {best_result['config']['hidden_dims']}\n")
-
-    print(f"Summary saved to: {txt_path}")
+    print(f"CSV metrics saved to: {csv_path}")
 
 
 if __name__ == '__main__':
@@ -600,11 +549,12 @@ if __name__ == '__main__':
     print("=" * 80)
     for config_name, result in sorted(
         results.items(),
-        key=lambda x: x[1]['metrics']['test_recon_error']
+        key=lambda x: x[1]['metrics'].get('final_loss', float('inf'))
     ):
         metrics = result['metrics']
         print(
             f"{config_name}: "
+            f"Loss={metrics.get('final_loss', -metrics.get('test_log_prob', 0)):.4f}, "
             f"Test recon error={metrics['test_recon_error']:.6f}, "
             f"Time={metrics['training_time']:.2f}s, "
             f"NFEs={metrics['nfe']}, "
@@ -612,4 +562,4 @@ if __name__ == '__main__':
         )
 
     # Save comprehensive summary
-    save_summary_txt(results)
+    save_summary_csv(results)

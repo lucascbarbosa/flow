@@ -9,6 +9,7 @@ from matplotlib.patches import Circle
 from src.models.neural_ode import NeuralODE
 from src.models.vector_field import VectorField2D
 from src.models.cnf import CNF
+from src.models.ffjord import FFJORD
 from typing import Optional, Tuple, Union
 from zuko.flows import RealNVP
 from sklearn.decomposition import PCA
@@ -684,6 +685,160 @@ class Synthetic2DViz:
         print(f"Saving GIF to: {save_path}")
         imageio.mimsave(save_path, frames, fps=fps, loop=0)
         print("GIF saved successfully!")
+
+    @classmethod
+    def plot_samples(
+        cls,
+        models: dict[str, Union[NeuralODE, CNF, FFJORD, RealNVP]],
+        n_samples: int = 1000,
+        n_steps: int = 100,
+        xlim: Tuple[float, float] = (-3, 3),
+        ylim: Tuple[float, float] = (-3, 3),
+        figsize: Optional[Tuple[int, int]] = None,
+        save_path: Optional[str] = None
+    ) -> None:
+        """Plot samples from multiple models for comparison.
+
+        Generates samples from z ~ N(0, I) transformed to x for each model
+        and creates a grid of subplots, one for each model configuration.
+
+        Args:
+            models (dict[str, Union[NeuralODE, CNF, FFJORD, RealNVP]]): Dictionary
+                mapping configuration names to model instances.
+
+            n_samples (int): Number of samples to generate per model.
+                Default is 1000.
+
+            n_steps (int): Number of time steps for ODE integration.
+                Default is 100.
+
+            xlim (Tuple[float, float]): Limits in x direction.
+                Default is (-3, 3).
+
+            ylim (Tuple[float, float]): Limits in y direction.
+                Default is (-3, 3).
+
+            figsize (Tuple[int, int], optional): Figure size (width, height).
+                If None, automatically determined based on number of models.
+                Default is None.
+
+            save_path (str, optional): Path to save the figure. If provided,
+                saves the figure to the specified path. Default is None.
+        """
+        n_models = len(models)
+        if n_models == 0:
+            raise ValueError("models dictionary cannot be empty")
+
+        # Determine grid layout
+        n_cols = int(np.ceil(np.sqrt(n_models)))
+        n_rows = int(np.ceil(n_models / n_cols))
+
+        # Set default figsize if not provided
+        if figsize is None:
+            figsize = (5 * n_cols, 5 * n_rows)
+
+        fig, axes = plt.subplots(
+            n_rows, n_cols, figsize=figsize, squeeze=False
+        )
+        axes_flat = axes.flatten()
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        for idx, (config_name, model) in enumerate(models.items()):
+            ax = axes_flat[idx]
+
+            # Set model to eval mode
+            model.eval()
+
+            # Generate samples
+            with torch.no_grad():
+                # Handle RealNVP separately
+                if isinstance(model, RealNVP):
+                    dist = model(None)
+                    try:
+                        z = dist.base.sample((n_samples,))
+                    except AttributeError:
+                        from torch.distributions import MultivariateNormal
+                        dim = dist.transform.domain.event_shape[0]
+                        base = MultivariateNormal(
+                            torch.zeros(dim, device=device),
+                            torch.eye(dim, device=device)
+                        )
+                        z = base.sample((n_samples,))
+                    transform = dist.transform
+                    x_samples = transform.inv(z)
+                else:
+                    # For NeuralODE, CNF, or FFJORD
+                    # Check if model has sample method
+                    if hasattr(model, 'sample'):
+                        x_samples = model.sample(n_samples, n_steps)
+                    else:
+                        # Fallback: sample z and transform
+                        features = model.vf.features
+                        z = torch.randn(n_samples, features, device=device)
+                        if hasattr(model, 'backward'):
+                            # Use backward to transform z -> x
+                            if isinstance(model, CNF) or isinstance(model, NeuralODE):
+                                x_t = model.backward(z, n_steps)
+                                if x_t.dim() == 3:
+                                    x_samples = x_t[-1]
+                                else:
+                                    x_samples = x_t
+                            else:
+                                # FFJORD
+                                x_samples, _ = model.backward(z, n_steps)
+                        else:
+                            # Last resort: use forward in reverse
+                            raise ValueError(
+                                f"Model {type(model)} does not support sampling"
+                            )
+
+            # Convert to numpy
+            x_samples_np = x_samples.cpu().numpy()
+
+            # Plot samples
+            ax.scatter(
+                x_samples_np[:, 0],
+                x_samples_np[:, 1],
+                alpha=0.5,
+                s=10
+            )
+
+            # Add unit circle reference
+            circle = Circle(
+                (0, 0),
+                2,
+                fill=False,
+                linestyle='--',
+                color='gray',
+                alpha=0.5
+            )
+            ax.add_patch(circle)
+
+            ax.set_xlabel(r'$x_1$')
+            ax.set_ylabel(r'$x_2$')
+            ax.set_title(config_name)
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+            ax.grid(True, alpha=0.3)
+            ax.axis('equal')
+
+        # Hide unused subplots
+        for idx in range(n_models, len(axes_flat)):
+            axes_flat[idx].axis('off')
+
+        plt.tight_layout()
+
+        # Save figure if path is provided
+        if save_path is not None:
+            # Ensure directory exists
+            dirname = (
+                os.path.dirname(save_path)
+                if os.path.dirname(save_path) else '.'
+            )
+            os.makedirs(dirname, exist_ok=True)
+            fig.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Figure saved to: {save_path}")
 
     @classmethod
     def plot_data_distribution(

@@ -178,12 +178,14 @@ def save_checkpoint(
         lambda_jf: Jacobian Frobenius regularization weight.
         checkpoint_path: Path to save checkpoint.
     """
+    final_loss = -final_log_prob
     checkpoint = {
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'history': history,
         'nfe': nfe,
         'final_log_prob': final_log_prob,
+        'final_loss': final_loss,
         'lambda_ke': lambda_ke,
         'lambda_jf': lambda_jf,
         'model_config': {
@@ -278,8 +280,12 @@ def compare_regularizations(
             history = checkpoint['history']
             nfe = checkpoint['nfe']
             final_log_prob = checkpoint['final_log_prob']
+            final_loss = checkpoint.get('final_loss', -final_log_prob)
 
-            print(f"Loaded: NFEs={nfe}, log-prob={final_log_prob:.4f}")
+            print(
+                f"Loaded: NFEs={nfe}, Loss={final_loss:.4f}, "
+                f"log-prob={final_log_prob:.4f}"
+            )
         else:
             # Train from scratch
             # Modelo
@@ -308,9 +314,10 @@ def compare_regularizations(
             model.eval()
             with torch.no_grad():
                 test_batch = torch.stack(
-                    [dataset[i] for i in range(100)]
+                    [dataset[i] for i in range(min(100, len(dataset)))]
                 ).to(device)
                 final_log_prob = model.log_prob(test_batch).mean().item()
+                final_loss = -final_log_prob
 
             # Save checkpoint
             save_checkpoint(
@@ -319,7 +326,8 @@ def compare_regularizations(
             )
 
             print(
-                f"NFEs: {nfe}, Final log-prob: {final_log_prob:.4f}"
+                f"NFEs: {nfe}, Loss: {final_loss:.4f}, "
+                f"Final log-prob: {final_log_prob:.4f}"
             )
 
         results[config_name] = {
@@ -327,6 +335,7 @@ def compare_regularizations(
             'lambda_jf': lambda_jf,
             'nfe': nfe,
             'final_log_prob': final_log_prob,
+            'final_loss': final_loss,
             'history': history,
             'model': model
         }
@@ -345,16 +354,21 @@ def save_summary_csv(
         save_dir: Directory to save CSV file.
     """
     os.makedirs(save_dir, exist_ok=True)
-    csv_path = os.path.join(save_dir, 'exp2_summary.csv')
+    csv_path = os.path.join(save_dir, 'exp2_metrics.csv')
 
     # Get baseline for computing differences
     baseline = results.get('λ_KE=0.0, λ_JF=0.0')
     baseline_log_prob = baseline['final_log_prob'] if baseline else None
     baseline_nfe = baseline['nfe'] if baseline else None
+    baseline_loss = (
+        baseline.get('final_loss', -baseline_log_prob)
+        if baseline else None
+    )
 
     # Prepare CSV data
     rows = []
     for config_name, result in results.items():
+        final_loss = result.get('final_loss', -result['final_log_prob'])
         ll_diff = (
             result['final_log_prob'] - baseline_log_prob
             if baseline_log_prob is not None
@@ -365,28 +379,35 @@ def save_summary_csv(
             if baseline_nfe is not None
             else None
         )
+        loss_diff = (
+            final_loss - baseline_loss
+            if baseline_loss is not None
+            else None
+        )
 
         rows.append({
             'Config': config_name,
             'Lambda_KE': result['lambda_ke'],
             'Lambda_JF': result['lambda_jf'],
-            'Log_Prob': result['final_log_prob'],
+            'Loss': final_loss,
             'NFE': result['nfe'],
+            'Log_Prob': result['final_log_prob'],
+            'Loss_Diff': loss_diff if loss_diff is not None else '',
             'Log_Prob_Diff': ll_diff if ll_diff is not None else '',
             'NFE_Diff': nfe_diff if nfe_diff is not None else ''
         })
 
     # Write CSV
     fieldnames = [
-        'Config', 'Lambda_KE', 'Lambda_JF', 'Log_Prob', 'NFE',
-        'Log_Prob_Diff', 'NFE_Diff'
+        'Config', 'Lambda_KE', 'Lambda_JF', 'Loss', 'NFE', 'Log_Prob',
+        'Loss_Diff', 'Log_Prob_Diff', 'NFE_Diff'
     ]
     with open(csv_path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"CSV summary saved to: {csv_path}")
+    print(f"CSV metrics saved to: {csv_path}")
 
 
 def analyze_regularization_impact(
