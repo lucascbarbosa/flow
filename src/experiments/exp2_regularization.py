@@ -7,6 +7,7 @@ from src.models.ffjord import FFJORD
 from src.models.vector_field import VectorField2D
 from src.utils.datasets import Synthetic2D, get_dataloader
 from src.utils.training import count_nfe
+from src.utils.visualization import Synthetic2DViz
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict
@@ -454,3 +455,22 @@ if __name__ == '__main__':
 
     # Generate comprehensive analysis
     analyze_regularization_impact(results, dataset)
+
+    # Plot samples from all models for comparison
+    print("\n" + "=" * 60)
+    print("GENERATING SAMPLE COMPARISON PLOT")
+    print("=" * 60)
+    models_dict = {
+        config_name: result['model']
+        for config_name, result in results.items()
+    }
+    plot_dir = os.path.join('results', 'plots', 'exp2')
+    os.makedirs(plot_dir, exist_ok=True)
+    plot_path = os.path.join(plot_dir, 'samples_comparison.png')
+    Synthetic2DViz.plot_samples(
+        models=models_dict,
+        n_samples=1000,
+        n_steps=100,
+        save_path=plot_path
+    )
+    print(f"Sample comparison plot saved to: {plot_path}")

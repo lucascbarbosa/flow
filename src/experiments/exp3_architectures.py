@@ -563,3 +563,22 @@ if __name__ == '__main__':
 
     # Save comprehensive summary
     save_summary_csv(results)
+
+    # Plot samples from all models for comparison
+    print("\n" + "=" * 60)
+    print("GENERATING SAMPLE COMPARISON PLOT")
+    print("=" * 60)
+    models_dict = {
+        config_name: result['model']
+        for config_name, result in results.items()
+    }
+    plot_dir = os.path.join('results', 'plots', 'exp3')
+    os.makedirs(plot_dir, exist_ok=True)
+    plot_path = os.path.join(plot_dir, 'samples_comparison.png')
+    Synthetic2DViz.plot_samples(
+        models=models_dict,
+        n_samples=1000,
+        n_steps=100,
+        save_path=plot_path
+    )
+    print(f"Sample comparison plot saved to: {plot_path}")
