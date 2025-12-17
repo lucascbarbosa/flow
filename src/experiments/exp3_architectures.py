@@ -9,7 +9,7 @@ import torch.optim as optim
 from src.models.vector_field import VectorField2D
 from src.models.ffjord import FFJORD
 from src.utils.datasets import Synthetic2D, get_dataloader
-from src.utils.training import train_ffjord, count_nfe
+from src.utils.training import count_nfe
 from src.utils.visualization import Synthetic2DViz
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
@@ -265,10 +265,10 @@ def train_ffjord_with_metrics(
             loss = nll
 
             loss.backward()
-            
+
             # Gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
+
             optimizer.step()
 
             total_loss += loss.item()
@@ -443,11 +443,15 @@ def compare_architectures(
                 history = checkpoint['history']
                 metrics = checkpoint['metrics']
 
+                # Compute number of parameters
+                num_params = sum(p.numel() for p in model.parameters())
+
                 print(
                     f"Loaded: Test recon error="
                     f"{metrics['test_recon_error']:.6f}, "
                     f"NFEs={metrics['nfe']}, "
-                    f"Training time={metrics['training_time']:.2f}s"
+                    f"Training time={metrics['training_time']:.2f}s, "
+                    f"Parameters={num_params}"
                 )
             else:
                 # Train from scratch
@@ -476,7 +480,7 @@ def compare_architectures(
                 )
 
             # Plot vector field
-            plot_dir = 'results/plots/exp3'
+            plot_dir = 'results/figures/exp3'
             os.makedirs(plot_dir, exist_ok=True)
             plot_path = os.path.join(
                 plot_dir, f"vector_field_{config_name}.png"
@@ -486,10 +490,18 @@ def compare_architectures(
                 n_grid=20, t=0.5, save_path=plot_path
             )
 
+            # Compute number of parameters
+            num_params = sum(p.numel() for p in model.parameters())
+
+            # Compute number of parameters if not already computed
+            if 'num_params' not in locals():
+                num_params = sum(p.numel() for p in model.parameters())
+
             results[config_name] = {
                 'model': model,
                 'history': history,
                 'metrics': metrics,
+                'num_params': num_params,
                 'config': {
                     'depth': depth_name,
                     'time_embed': time_name,
@@ -518,18 +530,22 @@ def save_summary_csv(
             'Depth': config['depth'],
             'Time_Embed': config['time_embed'],
             'Hidden_Dims': str(config['hidden_dims']),
-            'Loss': metrics.get('final_loss', -metrics.get('test_log_prob', 0)),
+            'Loss': metrics.get(
+                'final_loss', -metrics.get('test_log_prob', 0)
+            ),
             'NFE': metrics['nfe'],
             'Test_Log_Prob': metrics.get('test_log_prob', 0),
             'Test_Recon_Error': metrics['test_recon_error'],
             'Training_Time': metrics['training_time'],
-            'Convergence_Epoch': metrics['convergence_epoch']
+            'Convergence_Epoch': metrics['convergence_epoch'],
+            'Num_Parameters': result.get('num_params', 0)
         })
 
     # Write CSV
     fieldnames = [
         'Config', 'Depth', 'Time_Embed', 'Hidden_Dims', 'Loss', 'NFE',
-        'Test_Log_Prob', 'Test_Recon_Error', 'Training_Time', 'Convergence_Epoch'
+        'Test_Log_Prob', 'Test_Recon_Error', 'Training_Time',
+        'Convergence_Epoch', 'Num_Parameters'
     ]
     with open(csv_path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -552,9 +568,12 @@ if __name__ == '__main__':
         key=lambda x: x[1]['metrics'].get('final_loss', float('inf'))
     ):
         metrics = result['metrics']
+        final_loss = metrics.get(
+            'final_loss', -metrics.get('test_log_prob', 0)
+        )
         print(
             f"{config_name}: "
-            f"Loss={metrics.get('final_loss', -metrics.get('test_log_prob', 0)):.4f}, "
+            f"Loss={final_loss:.4f}, "
             f"Test recon error={metrics['test_recon_error']:.6f}, "
             f"Time={metrics['training_time']:.2f}s, "
             f"NFEs={metrics['nfe']}, "
@@ -564,21 +583,33 @@ if __name__ == '__main__':
     # Save comprehensive summary
     save_summary_csv(results)
 
-    # Plot samples from all models for comparison
+    # Plot transformations from all models for comparison
     print("\n" + "=" * 60)
-    print("GENERATING SAMPLE COMPARISON PLOT")
+    print("GENERATING TRANSFORMATION PLOTS")
     print("=" * 60)
-    models_dict = {
-        config_name: result['model']
-        for config_name, result in results.items()
-    }
-    plot_dir = os.path.join('results', 'plots', 'exp3')
-    os.makedirs(plot_dir, exist_ok=True)
-    plot_path = os.path.join(plot_dir, 'samples_comparison.png')
-    Synthetic2DViz.plot_samples(
-        models=models_dict,
+    models_list = []
+    save_paths = []
+
+    for config_name, result in results.items():
+        models_list.append(result['model'])
+
+        # Create save path
+        plot_dir = os.path.join('results', 'figures', 'exp3')
+        os.makedirs(plot_dir, exist_ok=True)
+        # Create safe filename
+        safe_name = (
+            config_name.replace(' ', '_')
+            .replace('=', '_')
+            .replace(',', '')
+        )
+        plot_path = os.path.join(plot_dir, f'transformation_{safe_name}.png')
+        save_paths.append(plot_path)
+
+    # Plot transformations for all configurations
+    Synthetic2DViz.plot_transformation(
+        models_list,
         n_samples=1000,
         n_steps=100,
-        save_path=plot_path
+        save_path=save_paths
     )
-    print(f"Sample comparison plot saved to: {plot_path}")
+    print(f"Transformation plots saved to: {plot_dir}")

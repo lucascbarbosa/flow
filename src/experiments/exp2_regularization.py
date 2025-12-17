@@ -344,6 +344,39 @@ def compare_regularizations(
     return results
 
 
+def compute_convergence_epoch(
+    history: Dict[str, list],
+    convergence_threshold: float = 0.001,
+    convergence_window: int = 5
+) -> int:
+    """Compute convergence epoch from training history.
+
+    Args:
+        history: Training history with 'loss' key.
+        convergence_threshold: Relative change threshold for convergence.
+        convergence_window: Number of epochs to check for stability.
+
+    Returns:
+        Epoch number when convergence was detected, or last epoch if not
+        converged.
+    """
+    if 'loss' not in history or len(history['loss']) < convergence_window:
+        return len(history.get('loss', []))
+
+    loss_list = history['loss']
+    for i in range(convergence_window - 1, len(loss_list)):
+        window_start = i - convergence_window + 1
+        window_losses = loss_list[window_start:i + 1]
+        if len(window_losses) == convergence_window:
+            loss_change = abs(
+                window_losses[-1] - window_losses[0]
+            ) / (window_losses[0] + 1e-8)
+            if loss_change < convergence_threshold:
+                return i + 1  # Return epoch number (1-indexed)
+
+    return len(loss_list)  # Did not converge within training period
+
+
 def save_summary_csv(
     results: Dict[str, Dict],
     save_dir: str = 'results'
@@ -386,6 +419,11 @@ def save_summary_csv(
             else None
         )
 
+        # Compute convergence epoch from history
+        convergence_epoch = None
+        if 'history' in result and result['history']:
+            convergence_epoch = compute_convergence_epoch(result['history'])
+
         rows.append({
             'Config': config_name,
             'Lambda_KE': result['lambda_ke'],
@@ -395,13 +433,16 @@ def save_summary_csv(
             'Log_Prob': result['final_log_prob'],
             'Loss_Diff': loss_diff if loss_diff is not None else '',
             'Log_Prob_Diff': ll_diff if ll_diff is not None else '',
-            'NFE_Diff': nfe_diff if nfe_diff is not None else ''
+            'NFE_Diff': nfe_diff if nfe_diff is not None else '',
+            'Convergence_Epoch': (
+                convergence_epoch if convergence_epoch is not None else ''
+            )
         })
 
     # Write CSV
     fieldnames = [
         'Config', 'Lambda_KE', 'Lambda_JF', 'Loss', 'NFE', 'Log_Prob',
-        'Loss_Diff', 'Log_Prob_Diff', 'NFE_Diff'
+        'Loss_Diff', 'Log_Prob_Diff', 'NFE_Diff', 'Convergence_Epoch'
     ]
     with open(csv_path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -456,21 +497,36 @@ if __name__ == '__main__':
     # Generate comprehensive analysis
     analyze_regularization_impact(results, dataset)
 
-    # Plot samples from all models for comparison
+    # Plot transformations from all models for comparison
     print("\n" + "=" * 60)
-    print("GENERATING SAMPLE COMPARISON PLOT")
+    print("GENERATING TRANSFORMATION PLOTS")
     print("=" * 60)
-    models_dict = {
-        config_name: result['model']
-        for config_name, result in results.items()
-    }
-    plot_dir = os.path.join('results', 'plots', 'exp2')
-    os.makedirs(plot_dir, exist_ok=True)
-    plot_path = os.path.join(plot_dir, 'samples_comparison.png')
-    Synthetic2DViz.plot_samples(
-        models=models_dict,
+    models_list = []
+    save_paths = []
+
+    for config_name, result in results.items():
+        models_list.append(result['model'])
+
+        # Create save path
+        plot_dir = os.path.join('results', 'figures', 'exp2')
+        os.makedirs(plot_dir, exist_ok=True)
+        # Create safe filename
+        safe_name = (
+            config_name.replace(' ', '_')
+            .replace('=', '_')
+            .replace(',', '')
+            .replace('λ', 'lambda')
+        )
+        plot_path = os.path.join(
+            plot_dir, f'transformation_{safe_name}.png'
+        )
+        save_paths.append(plot_path)
+
+    # Plot transformations for all configurations
+    Synthetic2DViz.plot_transformation(
+        models_list,
         n_samples=1000,
         n_steps=100,
-        save_path=plot_path
+        save_path=save_paths
     )
-    print(f"Sample comparison plot saved to: {plot_path}")
+    print(f"Transformation plots saved to: {plot_dir}")
