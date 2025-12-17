@@ -5,6 +5,7 @@ import time
 import torch
 import torch.nn as nn
 import math
+import matplotlib.pyplot as plt
 import torch.optim as optim
 from src.models.vector_field import VectorField2D
 from src.models.ffjord import FFJORD
@@ -479,16 +480,34 @@ def compare_architectures(
                     config_name, checkpoint_path, hidden_dims
                 )
 
-            # Plot vector field
+            # Plot vector field at multiple time points
             plot_dir = 'results/figures/exp3'
             os.makedirs(plot_dir, exist_ok=True)
             plot_path = os.path.join(
                 plot_dir, f"vector_field_{config_name}.png"
             )
-            Synthetic2DViz.plot_vector_field(
-                model, xlim=(-2, 2), ylim=(-2, 2),
-                n_grid=20, t=0.5, save_path=plot_path
+
+            # Create figure with 3 subplots for t=0.0, 0.5, 1.0
+            fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+            time_points = [0.0, 0.5, 1.0]
+
+            for ax, t_val in zip(axes, time_points):
+                Synthetic2DViz.plot_vector_field(
+                    model, xlim=(-2, 2), ylim=(-2, 2),
+                    n_grid=20, t=t_val, ax=ax, save_path=None
+                )
+
+            plt.suptitle(
+                f'Vector Field at Different Times: {config_name}',
+                fontsize=14, y=1.02
             )
+            plt.tight_layout()
+
+            # Save the combined figure
+            os.makedirs(plot_dir, exist_ok=True)
+            fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print(f"Vector field plots saved to: {plot_path}")
 
             # Compute number of parameters
             num_params = sum(p.numel() for p in model.parameters())
