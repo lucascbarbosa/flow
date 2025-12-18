@@ -270,30 +270,29 @@ def compare_solvers(
     for dataset_type in dataset_types:
         print(f"\nGenerating plots for dataset: {dataset_type}")
         models_list = []
-        save_paths = []
+        model_names = []
 
         for solver_key in results[dataset_type].keys():
             model = results[dataset_type][solver_key]['model']
             models_list.append(model)
+            model_names.append(solver_key)
 
-            # Create save path
-            plot_dir = os.path.join(
-                'results', 'figures', 'exp1', dataset_type
-            )
-            os.makedirs(plot_dir, exist_ok=True)
-            plot_path = os.path.join(
-                plot_dir, f'transformation_{solver_key}.png'
-            )
-            save_paths.append(plot_path)
+        # Create save path
+        plot_dir = os.path.join('results', 'figures', 'exp1')
+        os.makedirs(plot_dir, exist_ok=True)
+        plot_path = os.path.join(
+            plot_dir, f'{dataset_type}_transformations.png'
+        )
 
-        # Plot transformations for all solvers of this dataset
-        Synthetic2DViz.plot_transformation(
+        # Plot transformations for all solvers in a single figure with subplots
+        Synthetic2DViz.plot_transformations_subplots(
             models_list,
+            model_names=model_names,
             n_samples=1000,
             n_steps=100,
-            save_path=save_paths
+            save_path=plot_path
         )
-        print(f"Plots saved for {dataset_type}")
+        print(f"Plot saved for {dataset_type}: {plot_path}")
 
     return results
 

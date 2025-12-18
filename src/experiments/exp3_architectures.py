@@ -607,28 +607,25 @@ if __name__ == '__main__':
     print("GENERATING TRANSFORMATION PLOTS")
     print("=" * 60)
     models_list = []
-    save_paths = []
+    model_names = []
 
     for config_name, result in results.items():
         models_list.append(result['model'])
+        model_names.append(config_name)
 
-        # Create save path
-        plot_dir = os.path.join('results', 'figures', 'exp3')
-        os.makedirs(plot_dir, exist_ok=True)
-        # Create safe filename
-        safe_name = (
-            config_name.replace(' ', '_')
-            .replace('=', '_')
-            .replace(',', '')
-        )
-        plot_path = os.path.join(plot_dir, f'transformation_{safe_name}.png')
-        save_paths.append(plot_path)
+    # Create save path
+    plot_dir = os.path.join('results', 'figures', 'exp3')
+    os.makedirs(plot_dir, exist_ok=True)
+    plot_path = os.path.join(
+        plot_dir, 'transformation_all_architectures.png'
+    )
 
-    # Plot transformations for all configurations
-    Synthetic2DViz.plot_transformation(
+    # Plot transformations for all configs in a single figure with subplots
+    Synthetic2DViz.plot_transformations_subplots(
         models_list,
+        model_names=model_names,
         n_samples=1000,
         n_steps=100,
-        save_path=save_paths
+        save_path=plot_path
     )
-    print(f"Transformation plots saved to: {plot_dir}")
+    print(f"Transformation plot saved to: {plot_path}")

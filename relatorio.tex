@@ -1041,31 +1041,33 @@ Nesse milestone, utiliza-se o dataset MNIST completo e o traço estimado de Hutc
 
 
 \section{Experimentos}
-\subsection{Análise de NFEs}
+\subsection{Comparação entre solvers de ODE}
 A Tabela \ref{tab:exp1_results} descreve as diferentes configurações de solvers e tolerâncias usadas e suas respectivas métricas. O modelo utilizado é o \texttt{NeuralODE} cujos pesos são carregados dos checkpoints para cada distriubição. É possível notar que, como era esperado, o método dopri5 com as menores tolerâncias são os que geram os maiores NFEs. No entanto, o método que gera o maior tempo computacional em ambos os apssos é o rk4.
 
 \begin{table}[hbt!]
     \centering
     \resizebox{\textwidth}{!}{
-        \begin{tabular}{cccc|ccc}
+        \begin{tabular}{cccc|cccc}
             \hline
-            Distribuição & Solver & \texttt{rtol} & \texttt{atol} & NFEs & tempo forward (ms) & tempo backward (ms) \\
+            Distribuição & Solver & \texttt{rtol} & \texttt{atol} & NFEs & Loss & Tempo forward (ms) & Tempo backward (ms) \\
             \hline
-            moons & euler & -- & -- & 9 & 29.5 & 30.5 \\
-            moons & rk4 & -- & -- & 36 & 78.2 & 78.1 \\
-            moons & dopri5 & 1e{-3} & 1e{-4} & 56 & 31.4 & 32.0 \\
-            moons & dopri5 & 1e{-4} & 1e{-5} & 86 & 42.7 & 43.2 \\
-            moons & dopri5 & 1e{-5} & 1e{-6} & 122 & 56.6 & 59.2 \\
-            circles & euler & -- & -- & 9 & 26.8 & 26.8 \\
-            circles & rk4 & -- & -- & 36 & 71.7 & 73.2 \\
-            circles & dopri5 & 1e{-3} & 1e{-4} & 50 & 31.4 & 42.0 \\
-            circles & dopri5 & 1e{-4} & 1e{-5} & 68 & 36.7 & 39.3 \\
-            circles & dopri5 & 1e{-5} & 1e{-6} & 110 & 58.9 & 61.0 \\
-            spirals & euler & -- & -- & 9 & 115.6 & 26.1 \\
-            spirals & rk4 & -- & -- & 36 & 71.2 & 72.6 \\
-            spirals & dopri5 & 1e{-3} & 1e{-4} & 32 & 23.4 & 25.5 \\
-            spirals & dopri5 & 1e{-4} & 1e{-5} & 38 & 25.7 & 27.5 \\
-            spirals & dopri5 & 1e{-5} & 1e{-6} & 74 & 39.4 & 34.4 \\
+            moons & euler & -- & -- & \textbf{9} & 1.2323 & 23.0 & 18.4 \\
+            moons & rk4 & -- & -- & 36 & \textbf{0.3940} & 47.5 & 49.7 \\
+            moons & dopri5 & 1e{-3} & 1e{-4} & 38 & 0.4548 & \textbf{16.5} & \textbf{18.2} \\
+            moons & dopri5 & 1e{-4} & 1e{-5} & 68 & 0.4407 & 23.8 & 24.1 \\
+            moons & dopri5 & 1e{-5} & 1e{-6} & 110 & 0.4266 & 35.7 & 33.1 \\
+            \hline
+            circles & euler & -- & -- & \textbf{9} & \textbf{0.2961} & \textbf{16.8} & \textbf{17.1} \\
+            circles & rk4 & -- & -- & 36 & 0.3222 & 47.1 & 49.3 \\
+            circles & dopri5 & 1e{-3} & 1e{-4} & 38 & 0.3243 & 16.6 & 19.6 \\
+            circles & dopri5 & 1e{-4} & 1e{-5} & 74 & 0.3288 & 22.5 & 25.7 \\
+            circles & dopri5 & 1e{-5} & 1e{-6} & 104 & 0.3436 & 34.2 & 31.7 \\
+            \hline
+            spirals & euler & -- & -- & \textbf{9} & 0.2456 & 16.9 & 17.1 \\
+            spirals & rk4 & -- & -- & 36 & 0.2845 & 47.3 & 49.2 \\
+            spirals & dopri5 & 1e{-3} & 1e{-4} & 44 & 0.2744 & \textbf{18.1} & \textbf{21.1} \\
+            spirals & dopri5 & 1e{-4} & 1e{-5} & 74 & 0.2748 & 23.8 & 25.5 \\
+            spirals & dopri5 & 1e{-5} & 1e{-6} & 110 & \textbf{0.2642} & 32.9 & 33.2 \\
             \hline
         \end{tabular}
     }
@@ -1073,7 +1075,42 @@ A Tabela \ref{tab:exp1_results} descreve as diferentes configurações de solver
     \label{tab:exp1_results}
 \end{table}
 
-\subsection{Regularizações}
+Analisando os resultados, observa-se que o método Euler apresenta o menor número de avaliações de função (NFE=9) para todas as distribuições, como esperado, porém com tempos computacionais variáveis. O método RK4 mantém NFE constante (36) com tempos relativamente consistentes entre forward e backward (aproximadamente 47-49ms). O método adaptativo dopri5 apresenta comportamento interessante: configurações com tolerâncias mais rigorosas resultam em maior NFE (até 110 para dopri5 com tolerâncias mais baixas), mas os tempos computacionais não aumentam proporcionalmente devido à natureza adaptativa do solver.
+
+Em relação às melhores configurações por dataset:
+
+\begin{itemize}
+    \item \textbf{Moons}: O solver RK4 apresenta o melhor resultado em termos de Loss (0.3940), enquanto o dopri5 com tolerâncias moderadas (rtol=1e-3, atol=1e-4) oferece os melhores tempos computacionais (16.5ms forward, 18.2ms backward). O Euler, embora tenha o menor NFE (9), apresenta Loss significativamente maior (1.2323), sendo menos eficaz para esta distribuição.
+    
+    \item \textbf{Circles}: O solver Euler demonstra ser superior em todas as métricas, apresentando simultaneamente o menor Loss (0.2961), menor NFE (9) e menores tempos computacionais (16.8ms forward, 17.1ms backward), sendo claramente a melhor escolha para este dataset.
+    
+    \item \textbf{Spirals}: O dopri5 com tolerâncias mais rigorosas (rtol=1e-5, atol=1e-6) alcança o menor Loss (0.2642), enquanto o dopri5 com tolerâncias moderadas (rtol=1e-3, atol=1e-4) oferece os melhores tempos de execução (18.1ms forward, 21.1ms backward) com apenas 44 NFEs. A escolha entre essas configurações depende do trade-off desejado entre qualidade (Loss) e eficiência computacional.
+\end{itemize}
+
+As Figuras~\ref{fig:exp1_moons_transformations},~\ref{fig:exp1_circles_transformations} e~\ref{fig:exp1_spirals_transformations} mostram as transformações aprendidas pelos diferentes solvers para cada dataset, ilustrando visualmente as diferenças de desempenho observadas nas métricas quantitativas.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{results/figures/exp1/moons_transformations.png}
+    \caption{Transformações aprendidas pelos diferentes solvers para o dataset \texttt{moons}. Cada subplot mostra os dados transformados (z $\sim$ N(0,I) $\to$ x) para um solver específico.}
+    \label{fig:exp1_moons_transformations}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{results/figures/exp1/circles_transformations.png}
+    \caption{Transformações aprendidas pelos diferentes solvers para o dataset \texttt{circles}. Cada subplot mostra os dados transformados (z $\sim$ N(0,I) $\to$ x) para um solver específico.}
+    \label{fig:exp1_circles_transformations}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{results/figures/exp1/spirals_transformations.png}
+    \caption{Transformações aprendidas pelos diferentes solvers para o dataset \texttt{spirals}. Cada subplot mostra os dados transformados (z $\sim$ N(0,I) $\to$ x) para um solver específico.}
+    \label{fig:exp1_spirals_transformations}
+\end{figure}
+
+\subsection{Comparação entre fatores de regularização}
 A tabela \ref{tab:exp2_results} mostra os resultados do Experimento 2, comparando diferentes configurações de regularização aplicadas ao modelo FFJORD. As regularizações testadas são:
 \begin{itemize}
     \item \textbf{Kinetic Energy (KE)}: Penaliza velocidades altas no campo vetorial ($\lambda_{KE}$)
@@ -1092,13 +1129,13 @@ As métricas avaliadas são:
         \hline
         $\lambda_{KE}$ & $\lambda_{JF}$ & Log-Prob & NFE & $\Delta$ Log-Prob & $\Delta$ NFE \\
         \hline
-        0.0 & 0.0 & 2.5159 & 724 & -- & -- \\
-        0.01 & 0.0 & 2.5709 & 364 & +0.0550 & -360 \\
-        0.0 & 0.01 & 2.6805 & 1024 & +0.1647 & +300 \\
-        0.01 & 0.01 & 2.7906 & 640 & +0.2748 & -84 \\
-        0.1 & 0.0 & 2.4474 & 496 & -0.0685 & -228 \\
-        0.0 & 0.1 & 2.7408 & 820 & +0.2249 & +96 \\
-        0.1 & 0.1 & \textbf{2.8477} & 688 & +0.3318 & -36 \\
+        0.0 & 0.0 & 75.5241 & 2512 & -- & -- \\
+        0.01 & 0.0 & 76.9086 & 1948 & +1.3844 & -564 \\
+        0.0 & 0.01 & 71.6438 & 1552 & -3.8804 & -960 \\
+        0.01 & 0.01 & 75.1774 & 2572 & -0.3467 & +60 \\
+        0.1 & 0.0 & \textbf{85.9512} & 3388 & +10.4271 & +876 \\
+        0.0 & 0.1 & 66.5907 & 1912 & -8.9335 & -600 \\
+        0.1 & 0.1 & 66.7455 & 1792 & -8.7786 & -720 \\
         \hline
     \end{tabular}
     \caption{Experimento 2: Diferentes configurações de regularizações e as respectivas métricas. $\Delta$ Log-Prob e $\Delta$ NFE são as diferenças em relação ao baseline (sem regularização). O melhor resultado de Log-Prob está destacado em negrito.}
@@ -1107,12 +1144,14 @@ As métricas avaliadas são:
 
 Os resultados mostram que:
 \begin{itemize}
-    \item A configuração com ambas as regularizações em valores altos ($\lambda_{KE}=0.1, \lambda_{JF}=0.1$) obteve o melhor Log-Prob (2.8477), representando um ganho de +0.3318 em relação ao baseline.
-    \item A configuração com apenas Kinetic Energy em valor baixo ($\lambda_{KE}=0.01, \lambda_{JF}=0.0$) obteve o menor NFE (364), reduzindo em 360 avaliações em relação ao baseline, mantendo um Log-Prob competitivo (+0.0550).
-    \item A regularização Jacobian Frobenius isolada ($\lambda_{KE}=0.0, \lambda_{JF}=0.01$) aumentou significativamente o NFE (+300), mas também melhorou o Log-Prob (+0.1647).
-    \item A combinação de ambas as regularizações em valores baixos ($\lambda_{KE}=0.01, \lambda_{JF}=0.01$) oferece um bom equilíbrio, melhorando o Log-Prob (+0.2748) com apenas uma pequena redução no NFE (-84).
+    \item A configuração com apenas Kinetic Energy em valor alto ($\lambda_{KE}=0.1, \lambda_{JF}=0.0$) obteve o melhor Log-Prob (85.9512), representando um ganho significativo de +10.4271 em relação ao baseline, porém com aumento considerável no NFE (+876).
+    \item A configuração com apenas Kinetic Energy em valor baixo ($\lambda_{KE}=0.01, \lambda_{JF}=0.0$) oferece um bom equilíbrio, melhorando o Log-Prob (+1.3844) enquanto reduz o NFE em 564 avaliações, resultando em maior eficiência computacional.
+    \item A regularização Jacobian Frobenius isolada em valor baixo ($\lambda_{KE}=0.0, \lambda_{JF}=0.01$) reduz significativamente o NFE (-960), porém piora o Log-Prob (-3.8804), sugerindo que esta regularização sozinha não é eficaz.
+    \item As configurações com $\lambda_{JF}=0.1$ (isolada ou combinada) resultam em piora substancial no Log-Prob (aproximadamente -9), indicando que valores altos desta regularização são prejudiciais ao desempenho do modelo.
+    \item A combinação de ambas as regularizações em valores baixos ($\lambda_{KE}=0.01, \lambda_{JF}=0.01$) mantém Log-Prob próximo ao baseline (-0.3467) com aumento marginal no NFE (+60).
 \end{itemize}
 
+\subsection{Comparação entre Arquiteturas do \texttt{VectorField}}
 
 % \section{Tradeoff}
 % \section{Dificuldades encontradas}

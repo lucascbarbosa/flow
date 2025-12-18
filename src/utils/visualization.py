@@ -531,6 +531,184 @@ class Synthetic2DViz:
         return ax_left, ax_right
 
     @classmethod
+    def _plot_transformation_single_ax(
+        cls,
+        model: Union[NeuralODE, CNF, FFJORD, RealNVP],
+        ax: Axes,
+        n_samples: int = 1000,
+        n_steps: int = 100,
+        xlim: Tuple[float, float] = (-3, 3),
+        ylim: Tuple[float, float] = (-3, 3),
+        title: Optional[str] = None
+    ) -> Axes:
+        """Helper method to plot only the transformed data.
+
+        Args:
+            model: Single model.
+            ax: Matplotlib axis to plot on.
+            n_samples: Number of samples to generate.
+            n_steps: Number of time steps.
+            xlim: X-axis limits.
+            ylim: Y-axis limits.
+            title: Optional title for the subplot.
+
+        Returns:
+            Axes: The matplotlib axis.
+        """
+        # Handle RealNVP separately
+        if isinstance(model, RealNVP):
+            flow = model
+            flow.eval()
+            device = next(flow.parameters()).device
+            with torch.no_grad():
+                dist = flow(None)
+                try:
+                    z = dist.base.sample((n_samples,))
+                except AttributeError:
+                    from torch.distributions import MultivariateNormal
+                    dim = dist.transform.domain.event_shape[0]
+                    base = MultivariateNormal(
+                        torch.zeros(dim, device=device),
+                        torch.eye(dim, device=device)
+                    )
+                    z = base.sample((n_samples,))
+                transform = dist.transform
+                x = transform.inv(z)
+            x_final_np = x.cpu().numpy()
+        else:
+            # At this point, model is NeuralODE, CNF, or FFJORD
+            device = next(model.vf.parameters()).device
+            features = model.vf.features
+
+            # Only support 2D visualization
+            if features != 2:
+                raise ValueError(
+                    f"_plot_transformation_single_ax only supports 2D models "
+                    f"(got {features}D)"
+                )
+
+            # Sample z ~ N(0, I)
+            z = torch.randn(n_samples, features, device=device)
+
+            model.eval()
+            with torch.no_grad():
+                x_t = model.sample(n_samples, n_steps)
+
+            # Get final state
+            if x_t.dim() == 3:
+                x_final_np = x_t[-1].cpu().numpy()  # [n_samples, 2]
+            elif x_t.dim() == 2:
+                x_final_np = x_t.cpu().numpy()  # [n_samples, 2]
+            else:
+                raise ValueError(
+                    f"Unexpected x_t shape: {x_t.shape}. "
+                    f"Expected 2D [n_samples, 2] or 3D [n_steps, n_samples, 2]"
+                )
+
+        # Plot transformed data
+        ax.scatter(
+            x_final_np[:, 0],
+            x_final_np[:, 1],
+            alpha=0.5,
+            s=10
+        )
+
+        ax.set_xlabel(r'$x_1$')
+        ax.set_ylabel(r'$x_2$')
+        if title is not None:
+            ax.set_title(title)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.grid(True, alpha=0.3)
+        ax.axis('equal')
+
+        return ax
+
+    @classmethod
+    def plot_transformations_subplots(
+        cls,
+        models: List[Union[NeuralODE, CNF, FFJORD, RealNVP]],
+        model_names: Optional[List[str]] = None,
+        n_samples: int = 1000,
+        n_steps: int = 100,
+        xlim: Tuple[float, float] = (-3, 3),
+        ylim: Tuple[float, float] = (-3, 3),
+        n_cols: int = 3,
+        figsize: Optional[Tuple[float, float]] = None,
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """Plot transformations from multiple models in a single figure with subplots.
+
+        Each subplot shows only the transformed data (z -> x) for one model.
+
+        Args:
+            models: List of models to plot.
+            model_names: Optional list of names for each model (for titles).
+            n_samples: Number of samples to generate for each model.
+            n_steps: Number of time steps.
+            xlim: X-axis limits.
+            ylim: Y-axis limits.
+            n_cols: Number of columns in the subplot grid.
+            figsize: Optional figure size. If None, auto-calculated.
+            save_path: Optional path to save the figure.
+
+        Returns:
+            Figure: The matplotlib figure.
+        """
+        n_models = len(models)
+        if model_names is None:
+            model_names = [f"Model {i+1}" for i in range(n_models)]
+        elif len(model_names) != n_models:
+            raise ValueError(
+                f"Number of model names ({len(model_names)}) must match "
+                f"number of models ({n_models})"
+            )
+
+        # Calculate grid dimensions
+        n_rows = (n_models + n_cols - 1) // n_cols  # Ceiling division
+
+        # Auto-calculate figsize if not provided
+        if figsize is None:
+            figsize = (6 * n_cols, 5 * n_rows)
+
+        # Create figure with subplots
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+
+        # Handle case where we have only one subplot
+        if n_models == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if isinstance(axes, list) else [axes]
+        else:
+            axes = axes.flatten()
+
+        # Plot each model in its subplot
+        for i, (model, name) in enumerate(zip(models, model_names)):
+            ax = axes[i]
+            cls._plot_transformation_single_ax(
+                model, ax, n_samples, n_steps, xlim, ylim, title=name
+            )
+
+        # Hide unused subplots
+        for i in range(n_models, len(axes)):
+            axes[i].axis('off')
+
+        # Adjust layout
+        plt.tight_layout()
+
+        # Save figure if path is provided
+        if save_path is not None:
+            dirname = (
+                os.path.dirname(save_path)
+                if os.path.dirname(save_path) else '.'
+            )
+            os.makedirs(dirname, exist_ok=True)
+            fig.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Figure saved to: {save_path}")
+
+        return fig
+
+    @classmethod
     def _plot_transformation_realnvp(
         cls,
         flow: RealNVP,
