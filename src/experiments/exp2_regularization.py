@@ -7,6 +7,7 @@ from src.models.ffjord import FFJORD
 from src.models.vector_field import VectorField2D
 from src.utils.datasets import Synthetic2D, get_dataloader
 from src.utils.training import count_nfe
+from src.utils.visualization import Synthetic2DViz
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict
@@ -178,12 +179,14 @@ def save_checkpoint(
         lambda_jf: Jacobian Frobenius regularization weight.
         checkpoint_path: Path to save checkpoint.
     """
+    final_loss = -final_log_prob
     checkpoint = {
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'history': history,
         'nfe': nfe,
         'final_log_prob': final_log_prob,
+        'final_loss': final_loss,
         'lambda_ke': lambda_ke,
         'lambda_jf': lambda_jf,
         'model_config': {
@@ -278,8 +281,12 @@ def compare_regularizations(
             history = checkpoint['history']
             nfe = checkpoint['nfe']
             final_log_prob = checkpoint['final_log_prob']
+            final_loss = checkpoint.get('final_loss', -final_log_prob)
 
-            print(f"Loaded: NFEs={nfe}, log-prob={final_log_prob:.4f}")
+            print(
+                f"Loaded: NFEs={nfe}, Loss={final_loss:.4f}, "
+                f"log-prob={final_log_prob:.4f}"
+            )
         else:
             # Train from scratch
             # Modelo
@@ -308,9 +315,10 @@ def compare_regularizations(
             model.eval()
             with torch.no_grad():
                 test_batch = torch.stack(
-                    [dataset[i] for i in range(100)]
+                    [dataset[i] for i in range(min(100, len(dataset)))]
                 ).to(device)
                 final_log_prob = model.log_prob(test_batch).mean().item()
+                final_loss = -final_log_prob
 
             # Save checkpoint
             save_checkpoint(
@@ -319,7 +327,8 @@ def compare_regularizations(
             )
 
             print(
-                f"NFEs: {nfe}, Final log-prob: {final_log_prob:.4f}"
+                f"NFEs: {nfe}, Loss: {final_loss:.4f}, "
+                f"Final log-prob: {final_log_prob:.4f}"
             )
 
         results[config_name] = {
@@ -327,11 +336,45 @@ def compare_regularizations(
             'lambda_jf': lambda_jf,
             'nfe': nfe,
             'final_log_prob': final_log_prob,
+            'final_loss': final_loss,
             'history': history,
             'model': model
         }
 
     return results
+
+
+def compute_convergence_epoch(
+    history: Dict[str, list],
+    convergence_threshold: float = 0.001,
+    convergence_window: int = 5
+) -> int:
+    """Compute convergence epoch from training history.
+
+    Args:
+        history: Training history with 'loss' key.
+        convergence_threshold: Relative change threshold for convergence.
+        convergence_window: Number of epochs to check for stability.
+
+    Returns:
+        Epoch number when convergence was detected, or last epoch if not
+        converged.
+    """
+    if 'loss' not in history or len(history['loss']) < convergence_window:
+        return len(history.get('loss', []))
+
+    loss_list = history['loss']
+    for i in range(convergence_window - 1, len(loss_list)):
+        window_start = i - convergence_window + 1
+        window_losses = loss_list[window_start:i + 1]
+        if len(window_losses) == convergence_window:
+            loss_change = abs(
+                window_losses[-1] - window_losses[0]
+            ) / (window_losses[0] + 1e-8)
+            if loss_change < convergence_threshold:
+                return i + 1  # Return epoch number (1-indexed)
+
+    return len(loss_list)  # Did not converge within training period
 
 
 def save_summary_csv(
@@ -345,16 +388,21 @@ def save_summary_csv(
         save_dir: Directory to save CSV file.
     """
     os.makedirs(save_dir, exist_ok=True)
-    csv_path = os.path.join(save_dir, 'exp2_summary.csv')
+    csv_path = os.path.join(save_dir, 'exp2_metrics.csv')
 
     # Get baseline for computing differences
     baseline = results.get('λ_KE=0.0, λ_JF=0.0')
     baseline_log_prob = baseline['final_log_prob'] if baseline else None
     baseline_nfe = baseline['nfe'] if baseline else None
+    baseline_loss = (
+        baseline.get('final_loss', -baseline_log_prob)
+        if baseline else None
+    )
 
     # Prepare CSV data
     rows = []
     for config_name, result in results.items():
+        final_loss = result.get('final_loss', -result['final_log_prob'])
         ll_diff = (
             result['final_log_prob'] - baseline_log_prob
             if baseline_log_prob is not None
@@ -365,28 +413,43 @@ def save_summary_csv(
             if baseline_nfe is not None
             else None
         )
+        loss_diff = (
+            final_loss - baseline_loss
+            if baseline_loss is not None
+            else None
+        )
+
+        # Compute convergence epoch from history
+        convergence_epoch = None
+        if 'history' in result and result['history']:
+            convergence_epoch = compute_convergence_epoch(result['history'])
 
         rows.append({
             'Config': config_name,
             'Lambda_KE': result['lambda_ke'],
             'Lambda_JF': result['lambda_jf'],
-            'Log_Prob': result['final_log_prob'],
+            'Loss': final_loss,
             'NFE': result['nfe'],
+            'Log_Prob': result['final_log_prob'],
+            'Loss_Diff': loss_diff if loss_diff is not None else '',
             'Log_Prob_Diff': ll_diff if ll_diff is not None else '',
-            'NFE_Diff': nfe_diff if nfe_diff is not None else ''
+            'NFE_Diff': nfe_diff if nfe_diff is not None else '',
+            'Convergence_Epoch': (
+                convergence_epoch if convergence_epoch is not None else ''
+            )
         })
 
     # Write CSV
     fieldnames = [
-        'Config', 'Lambda_KE', 'Lambda_JF', 'Log_Prob', 'NFE',
-        'Log_Prob_Diff', 'NFE_Diff'
+        'Config', 'Lambda_KE', 'Lambda_JF', 'Loss', 'NFE', 'Log_Prob',
+        'Loss_Diff', 'Log_Prob_Diff', 'NFE_Diff', 'Convergence_Epoch'
     ]
     with open(csv_path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"CSV summary saved to: {csv_path}")
+    print(f"CSV metrics saved to: {csv_path}")
 
 
 def analyze_regularization_impact(
@@ -433,3 +496,37 @@ if __name__ == '__main__':
 
     # Generate comprehensive analysis
     analyze_regularization_impact(results, dataset)
+
+    # Plot transformations from all models for comparison
+    print("\n" + "=" * 60)
+    print("GENERATING TRANSFORMATION PLOTS")
+    print("=" * 60)
+    models_list = []
+    save_paths = []
+
+    for config_name, result in results.items():
+        models_list.append(result['model'])
+
+        # Create save path
+        plot_dir = os.path.join('results', 'figures', 'exp2')
+        os.makedirs(plot_dir, exist_ok=True)
+        # Create safe filename
+        safe_name = (
+            config_name.replace(' ', '_')
+            .replace('=', '_')
+            .replace(',', '')
+            .replace('λ', 'lambda')
+        )
+        plot_path = os.path.join(
+            plot_dir, f'transformation_{safe_name}.png'
+        )
+        save_paths.append(plot_path)
+
+    # Plot transformations for all configurations
+    Synthetic2DViz.plot_transformation(
+        models_list,
+        n_samples=1000,
+        n_steps=100,
+        save_path=save_paths
+    )
+    print(f"Transformation plots saved to: {plot_dir}")
