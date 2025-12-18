@@ -576,7 +576,7 @@ def save_summary_csv(
 
 if __name__ == '__main__':
     # Run comparison
-    results = compare_architectures(n_epochs=50)
+    results = compare_architectures(n_epochs=100)
 
     # Print summary
     print("\n" + "=" * 80)

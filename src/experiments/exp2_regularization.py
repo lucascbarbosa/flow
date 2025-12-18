@@ -220,7 +220,7 @@ def load_checkpoint(
 def compare_regularizations(
     checkpoint_dir: str = 'results/checkpoints/exp2',
     resume: bool = True,
-    n_epochs: int = 50
+    n_epochs: int = 100
 ):
     """Compara diferentes combinações de regularização.
 
