@@ -132,7 +132,7 @@ def compare_solvers(
                     rtol=rtol,
                     atol=atol
                 ).to(device)
-                optimizer = optim.Adam(model.parameters(), lr=1e-3)
+                optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
                 # Train
                 final_loss = train_neural_ode(
