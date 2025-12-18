@@ -225,7 +225,7 @@ def train_ffjord_with_metrics(
     test_loader: DataLoader,
     optimizer: optim.Optimizer,
     device: torch.device,
-    n_epochs: int = 50,
+    n_epochs: int = 200,
     convergence_threshold: float = 0.001,
     convergence_window: int = 5
 ) -> Tuple[Dict[str, list], Dict[str, float]]:
@@ -361,7 +361,7 @@ def train_ffjord_with_metrics(
 def compare_architectures(
     checkpoint_dir: str = 'results/checkpoints/exp3',
     resume: bool = True,
-    n_epochs: int = 50
+    n_epochs: int = 200
 ) -> Dict[str, Dict]:
     """Compara diferentes arquiteturas de Vector Field.
 
@@ -576,7 +576,7 @@ def save_summary_csv(
 
 if __name__ == '__main__':
     # Run comparison
-    results = compare_architectures(n_epochs=100)
+    results = compare_architectures(n_epochs=200)
 
     # Print summary
     print("\n" + "=" * 80)

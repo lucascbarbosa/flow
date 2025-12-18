@@ -299,7 +299,7 @@ def compare_solvers(
 
 
 if __name__ == '__main__':
-    results = compare_solvers(n_epochs=100)
+    results = compare_solvers(n_epochs=200)
     print("\n=== Resumo ===")
     for dataset_type, dataset_results in results.items():
         print(f"\nDataset: {dataset_type}")

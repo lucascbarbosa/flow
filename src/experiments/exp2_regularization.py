@@ -48,7 +48,7 @@ def train_ffjord_with_regularization(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    n_epochs: int = 100,
+    n_epochs: int = 200,
     lambda_ke: float = 0.0,
     lambda_jf: float = 0.0,
     reg_time: float = 0.5
@@ -220,7 +220,7 @@ def load_checkpoint(
 def compare_regularizations(
     checkpoint_dir: str = 'results/checkpoints/exp2',
     resume: bool = True,
-    n_epochs: int = 100
+    n_epochs: int = 200
 ):
     """Compara diferentes combinações de regularização.
 
