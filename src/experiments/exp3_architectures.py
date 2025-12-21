@@ -226,7 +226,7 @@ def train_ffjord_with_metrics(
     test_loader: DataLoader,
     optimizer: optim.Optimizer,
     device: torch.device,
-    n_epochs: int = 200,
+    n_epochs: int = 100,
     convergence_threshold: float = 0.001,
     convergence_window: int = 5
 ) -> Tuple[Dict[str, list], Dict[str, float]]:
@@ -362,7 +362,7 @@ def train_ffjord_with_metrics(
 def compare_architectures(
     checkpoint_dir: str = 'results/checkpoints/exp3',
     resume: bool = True,
-    n_epochs: int = 200,
+    n_epochs: int = 100,
     depth_names: list[str] | None = None,
     time_embed_names: list[str] | None = None
 ) -> Dict[str, Dict]:
@@ -637,7 +637,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--n-epochs',
         type=int,
-        default=200,
+        default=100,
         help='Number of training epochs (default: 200)'
     )
     parser.add_argument(
