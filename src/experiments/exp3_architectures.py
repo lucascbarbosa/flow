@@ -2,6 +2,7 @@
 import os
 import csv
 import time
+import argparse
 import torch
 import torch.nn as nn
 import math
@@ -361,7 +362,9 @@ def train_ffjord_with_metrics(
 def compare_architectures(
     checkpoint_dir: str = 'results/checkpoints/exp3',
     resume: bool = True,
-    n_epochs: int = 200
+    n_epochs: int = 200,
+    depth_names: list[str] | None = None,
+    time_embed_names: list[str] | None = None
 ) -> Dict[str, Dict]:
     """Compara diferentes arquiteturas de Vector Field.
 
@@ -369,6 +372,12 @@ def compare_architectures(
         checkpoint_dir: Directory to save/load checkpoints.
         resume: If True, load existing checkpoints instead of retraining.
         n_epochs: Number of training epochs if training from scratch.
+        depth_names: List of depth config names to use
+            (e.g., ['Shallow', 'Medium']). If None, uses all available
+            depth configs.
+        time_embed_names: List of time embedding config names to use
+            (e.g., ['Simple', 'Sinusoidal']). If None, uses all available
+            time embedding configs.
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -392,18 +401,49 @@ def compare_architectures(
 
     # Architecture configurations
     # 4 depth/width configs × 3 time embeddings = 12 configs
-    depth_configs = {
+    all_depth_configs = {
         'Shallow': [64, 64],
         'Medium': [64, 64, 64, 64],
         'Deep': [128, 128, 128, 128, 128, 128],
         'Wide': [256, 256]
     }
 
-    time_embed_configs = {
+    all_time_embed_configs = {
         'Simple': (SimpleTimeVF, 1),
         'Sinusoidal': (SinusoidalVF, 32),
         'Learnable': (LearnableTimeVF, 16)
     }
+
+    # Filter configs if specified
+    if depth_names is None:
+        depth_configs = all_depth_configs
+    else:
+        # Validate depth_names
+        invalid = set(depth_names) - set(all_depth_configs.keys())
+        if invalid:
+            raise ValueError(
+                f"Invalid depth_names: {invalid}. "
+                f"Available options: {list(all_depth_configs.keys())}"
+            )
+        depth_configs = {
+            k: v for k, v in all_depth_configs.items()
+            if k in depth_names
+        }
+
+    if time_embed_names is None:
+        time_embed_configs = all_time_embed_configs
+    else:
+        # Validate time_embed_names
+        invalid = set(time_embed_names) - set(all_time_embed_configs.keys())
+        if invalid:
+            raise ValueError(
+                f"Invalid time_embed_names: {invalid}. "
+                f"Available options: {list(all_time_embed_configs.keys())}"
+            )
+        time_embed_configs = {
+            k: v for k, v in all_time_embed_configs.items()
+            if k in time_embed_names
+        }
 
     results = {}
 
@@ -575,8 +615,56 @@ def save_summary_csv(
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Compare different Vector Field architectures'
+    )
+    parser.add_argument(
+        '--depth-names',
+        type=str,
+        nargs='+',
+        default=None,
+        choices=['Shallow', 'Medium', 'Deep', 'Wide'],
+        help='Depth config names to use (default: all)'
+    )
+    parser.add_argument(
+        '--time-embed-names',
+        type=str,
+        nargs='+',
+        default=None,
+        choices=['Simple', 'Sinusoidal', 'Learnable'],
+        help='Time embedding config names to use (default: all)'
+    )
+    parser.add_argument(
+        '--n-epochs',
+        type=int,
+        default=200,
+        help='Number of training epochs (default: 200)'
+    )
+    parser.add_argument(
+        '--checkpoint-dir',
+        type=str,
+        default='results/checkpoints/exp3',
+        help=(
+            'Directory to save/load checkpoints '
+            '(default: results/checkpoints/exp3)'
+        )
+    )
+    parser.add_argument(
+        '--no-resume',
+        action='store_true',
+        help='Do not resume from existing checkpoints'
+    )
+
+    args = parser.parse_args()
+
     # Run comparison
-    results = compare_architectures(n_epochs=200)
+    results = compare_architectures(
+        checkpoint_dir=args.checkpoint_dir,
+        resume=not args.no_resume,
+        n_epochs=args.n_epochs,
+        depth_names=args.depth_names,
+        time_embed_names=args.time_embed_names
+    )
 
     # Print summary
     print("\n" + "=" * 80)
